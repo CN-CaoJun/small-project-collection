@@ -9,6 +9,10 @@
 extern "C" {
 #endif
 
+#define SIZE_KB(n)	(n*1024UL)
+#define SIZE_MB(n)	(SIZE_KB(n)*1024UL)
+#define SIZE_GB(n)	(SIZE_MB(n)*1024UL)
+
 /* Status of Disk Functions */
 typedef BYTE	DSTATUS;
 

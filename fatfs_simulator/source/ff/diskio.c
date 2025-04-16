@@ -11,17 +11,15 @@
 #include "diskio.h"		/* Declarations of disk functions */
 #include <stdio.h>
 #include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 /* Definitions of physical drive number for each drive */
 #define DEV_RAM		0	/* Example: Map Ramdisk to physical drive 0 */
 #define DEV_MMC		1	/* Example: Map MMC/SD card to physical drive 1 */
 #define DEV_USB		2	/* Example: Map USB MSD to physical drive 2 */
 
-#define VIRTUAL_DISK_PATH "/media/sf_Ubuntu-Share/ff_alex/sd.bin"
-
-// #define VIRTUAL_DISK_PATH "/mnt/virtual_disk.img"
-
-FILE *virtual_disk;
+int fd = -1;
 
 /*-----------------------------------------------------------------------*/
 /* Get Drive Status                                                      */
@@ -31,9 +29,6 @@ DSTATUS disk_status (
 	BYTE pdrv		/* Physical drive nmuber to identify the drive */
 )
 {
-	DSTATUS stat;
-	int result;
-
 	return RES_OK;
 }
 
@@ -46,9 +41,10 @@ DSTATUS disk_initialize (
 	BYTE pdrv				/* Physical drive nmuber to identify the drive */
 )
 {
-    virtual_disk = fopen(VIRTUAL_DISK_PATH, "rb+");
-    if (!virtual_disk) {
-		printf("disk init error\n");
+	const char* block_device = "/home/caojun/wkspace/github_collect/small-project-collection/fatfs_simulator/disk.img";
+    fd = open(block_device, O_RDWR);
+    if (fd == -1) {
+        printf("无法打开块设备文件\r\n");
         return STA_NOINIT;
     }
     return RES_OK;
@@ -68,13 +64,13 @@ DRESULT disk_read (
 )
 {
 	size_t ret;
-	if (!virtual_disk) {
+	__off_t sct = sector*512UL;
+	if (fd == -1) {
         return RES_NOTRDY;
     }
-    
-    fseek(virtual_disk, sector * 512, SEEK_SET);
-    ret = fread(buff, 512, count, virtual_disk);
-	if (ret < count)
+    ret = lseek(fd, sct, SEEK_SET);
+    ret = read(fd, buff, 512 * count);
+	if (ret < count*512)
 	{
 		printf("disk read error\n");
 	}
@@ -97,17 +93,18 @@ DRESULT disk_write (
 )
 {
 	size_t ret;
-	if (!virtual_disk) {
+	__off_t sct = sector*512UL;
+	if (fd == -1) {
         return RES_NOTRDY;
     }
     
-    fseek(virtual_disk, sector * 512, SEEK_SET);
-    ret = fwrite(buff, 512, count, virtual_disk);
+    ret = lseek(fd, sct, SEEK_SET);
+    ret = write(fd, buff, 512 * count);
 	if (ret < count)
 	{
 		printf("disk write error\n");
 	}
-    fflush(virtual_disk);
+    fsync(fd);
     return RES_OK;
 }
 
@@ -129,7 +126,7 @@ DRESULT disk_ioctl (
 		break;
  
 	case GET_SECTOR_COUNT:
-		*(DWORD *)buff = 512;
+		*(DWORD *)buff = SIZE_MB(256)/512;
  
 		break;
  
@@ -138,7 +135,7 @@ DRESULT disk_ioctl (
 		break;
  
 	case GET_BLOCK_SIZE:
-		*(DWORD *)buff = 200;
+		*(DWORD *)buff = 512;
 		break;
 		
 	case CTRL_TRIM:

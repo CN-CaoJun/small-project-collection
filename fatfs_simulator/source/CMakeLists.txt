@@ -1,4 +1,3 @@
-
 INCLUDE_DIRECTORIES(${SOURCE_PATH}/ff)
 aux_source_directory(${SOURCE_PATH}/ff DIR_LIB_SRCS)
 
@@ -8,5 +7,5 @@ aux_source_directory(${SOURCE_PATH}/main DIR_LIB_SRCS)
 INCLUDE_DIRECTORIES(${SOURCE_PATH}/source)
 aux_source_directory(${SOURCE_PATH}/source  DIR_LIB_SRCS)
 
-
-add_executable(example  ${DIR_LIB_SRCS})
+# 使用变量代替硬编码的工程名
+add_executable(${PROJECT_NAME}  ${DIR_LIB_SRCS})
