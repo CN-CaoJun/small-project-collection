@@ -1,0 +1,8 @@
+# Ignore build folder
+build/
+
+# Ignore VSCode files
+.vscode/
+
+# Existing ignore rules
+# Add your own rules below
