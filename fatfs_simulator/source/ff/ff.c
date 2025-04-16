@@ -593,9 +593,6 @@ static const BYTE DbcTbl[] = MKCVTBL(TBL_DC, FF_CODE_PAGE);
 
 #endif
 
-
-
-
 /*--------------------------------------------------------------------------
 
    Module Private Functions

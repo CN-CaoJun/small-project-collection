@@ -1,10 +1,2 @@
 # Ignore build folder
 build/
-
-# Ignore VSCode files
-.vscode/
-
-img*
-fatfs_simulator
-# Existing ignore rules
-# Add your own rules below

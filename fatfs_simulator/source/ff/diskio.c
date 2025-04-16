@@ -41,7 +41,7 @@ DSTATUS disk_initialize (
 	BYTE pdrv				/* Physical drive nmuber to identify the drive */
 )
 {
-	const char* block_device = "/home/caojun/wkspace/github_collect/small-project-collection/fatfs_simulator/disk.img";
+	const char* block_device = "/media/sf_Ubuntu-Share/vgm.img";
     fd = open(block_device, O_RDWR);
     if (fd == -1) {
         printf("无法打开块设备文件\r\n");
@@ -126,8 +126,7 @@ DRESULT disk_ioctl (
 		break;
  
 	case GET_SECTOR_COUNT:
-		*(DWORD *)buff = SIZE_MB(256)/512;
- 
+		*(DWORD *)buff = SIZE_MB(512)/512;
 		break;
  
 	case GET_SECTOR_SIZE:
