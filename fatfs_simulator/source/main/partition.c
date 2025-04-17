@@ -6,17 +6,50 @@
 // #include "Platform_Types.h"
 
 extern int fd;
-static DWORD plist[] = {76, 8, 9, 9}; /* Divide drive into Four partitions */
+static DWORD plist[] = {76, 8, 8, 8}; /* Divide drive into Four partitions */
 unsigned char work[4096];
 FATFS ffs0;
 FATFS ffs1;
 FATFS ffs2;
 FATFS ffs3;
 
-const unsigned char Fatfs_Init_Flag = 0;
+const unsigned char Fatfs_Init_Flag = 1;
 
-int part_mount(void)
-{
+void print_files_in_partition(const char* path) {
+    FRESULT res;
+    DIR dir;
+    static FILINFO fno;
+
+    res = f_opendir(&dir, path); /* Open the directory */
+    if (res == FR_OK) {
+        for (;;) {
+            res = f_readdir(&dir, &fno); /* Read a directory item */
+            if (res != FR_OK || fno.fname[0] == 0) break; /* Break on error or end of dir */
+            if (fno.fattrib & AM_DIR) { /* It is a directory */
+                printf("   DIR: %s\n", fno.fname);
+            } else { /* It is a file */
+                printf("   FILE: %s\n", fno.fname);
+            }
+        }
+        f_closedir(&dir);
+    }
+}
+
+void print_partitions() {
+    printf("Contents of OTA_VBF:\n");
+    print_files_in_partition("OTA_VBF:");
+
+    printf("Contents of OTA_METADATA:\n");
+    print_files_in_partition("OTA_METADATA:");
+
+    printf("Contents of RVDC:\n");
+    print_files_in_partition("RVDC:");
+
+    printf("Contents of SAL:\n");
+    print_files_in_partition("SAL:");
+}
+
+int part_mount(void) {
     FRESULT ret;
     // FIL file;
     static const MKFS_PARM format_opt = {(FM_FAT32 | FM_SFD), 0, 0, 0, 0}; /* FileSystem Format options*/
@@ -67,6 +100,7 @@ int part_mount(void)
         }
         
         printf("挂载文件系统 成功\n");
+        print_partitions(); // Print the contents of each partition
     }
     return 0;
 }
