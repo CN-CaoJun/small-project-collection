@@ -30,6 +30,7 @@ void perform_file_io_test() {
             ret = f_open(&file, IOTESTFILE_PATH, FA_WRITE | FA_CREATE_ALWAYS); // Updated filename
             if (ret == FR_OK) {
                 f_write(&file, buffer, block_size, &bw);
+                f_sync(&file);
                 f_close(&file);
             }
             clock_t end_write = clock();
@@ -43,6 +44,7 @@ void perform_file_io_test() {
             ret = f_open(&file, IOTESTFILE_PATH, FA_READ); // Updated filename
             if (ret == FR_OK) {
                 f_read(&file, buffer, block_size, &br);
+                f_sync(&file);
                 f_close(&file);
             }
             clock_t end_read = clock();
