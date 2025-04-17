@@ -6,14 +6,14 @@
 // #include "Platform_Types.h"
 
 extern int fd;
-static DWORD plist[] = {76, 8, 8, 8}; /* Divide drive into four partitions */
+static DWORD plist[] = {25, 25, 25, 25}; /* Divide drive into four partitions */
 unsigned char work[4096];
 FATFS ffs0;
 FATFS ffs1;
 FATFS ffs2;
 FATFS ffs3;
 
-const unsigned char Fatfs_Init_Flag = 1;
+const unsigned char Fatfs_Init_Flag = 0;
 
 void print_files_in_partition(const char* path) {
     FRESULT res;
@@ -66,49 +66,20 @@ int part_mount(void) {
             printf("Virtual disk initialized successfully\n");
         }
 
-        // Check the number of partitions
-        int partition_count = sizeof(plist) / sizeof(plist[0]);
-        printf("Number of partitions: %d\n", partition_count);
-
-        // Check partition types and names
-        printf("Partition types and names:\n");
-        printf("Partition 1: OTA_VBF (FAT32)\n");
-        printf("Partition 2: OTA_METADATA (FAT32)\n");
-        printf("Partition 3: RVDC (FAT32)\n");
-        printf("Partition 4: SAL (FAT32)\n");
-
-        // Check if partitions are already formatted
-        ret = f_mount(&ffs0, "OTA_VBF:", 0);
-        ret |= f_mount(&ffs1, "OTA_METADATA:", 0);
-        ret |= f_mount(&ffs2, "RVDC:", 0);
-        ret |= f_mount(&ffs3, "SAL:", 0);
-
-        if (ret != FR_OK)
-         {
-            printf("Partitions are not formatted, formatting...\n");
-            // Partitions are not formatted, proceed with formatting
-            ret = f_mkfs("OTA_VBF:", &format_opt, work, 4096);
-            ret |= f_mkfs("OTA_METADATA:", &format_opt, work, 4096);
-            ret |= f_mkfs("RVDC:", &format_opt, work, 4096);
-            ret |= f_mkfs("SAL:", &format_opt, work, 4096);
-            if (ret != FR_OK)
-            {
-                printf("Failed to format filesystem\n");
-                return 1;
-            }
-            else
-            {
-                printf("Filesystem formatted successfully\n");
-            }
-        } 
-        else 
+        printf("The disk is going to formatting...\n");
+        // Partitions are not formatted, proceed with formatting
+        ret = f_mkfs("OTA_VBF:", &format_opt, work, 4096);
+        ret |= f_mkfs("OTA_METADATA:", &format_opt, work, 4096);
+        ret |= f_mkfs("RVDC:", &format_opt, work, 4096);
+        ret |= f_mkfs("SAL:", &format_opt, work, 4096);
+        if (ret != FR_OK) 
         {
-            printf("Filesystem already formatted\n");
-            // Partitions are already formatted, unmount them first
-            f_mount(NULL, "OTA_VBF:", 0);
-            f_mount(NULL, "OTA_METADATA:", 0);
-            f_mount(NULL, "RVDC:", 0);
-            f_mount(NULL, "SAL:", 0);
+            printf("Failed to format filesystem\n");
+            return 1;
+        }
+        else
+        {
+            printf("Filesystem formatted successfully\n");
         }
     }
 

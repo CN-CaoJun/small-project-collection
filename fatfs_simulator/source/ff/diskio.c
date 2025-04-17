@@ -41,7 +41,7 @@ DSTATUS disk_initialize (
 	BYTE pdrv				/* Physical drive nmuber to identify the drive */
 )
 {
-	const char* block_device = "/dev/loop0";
+	const char* block_device = "/dev/sdb";
     fd = open(block_device, O_RDWR);
     if (fd == -1) {
         printf("无法打开块设备文件\r\n");
