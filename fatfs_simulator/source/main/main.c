@@ -17,6 +17,9 @@ int main() {
     // Perform I/O performance test
     perform_file_io_test();
 
+    // Perform large file speed test
+    perform_large_file_test();
+
     printf("start to umount\n");
     part_umount();
 

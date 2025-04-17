@@ -21,3 +21,36 @@ sudo mount /dev/loop0 /mnt/fatfs
 sudo umount /mnt/fatfs
 ```
 
+### detach the loop device
+```
+sudo losetup -d /dev/loop0
+```
+### how to debug
+
+step 1: run gdbserver
+```
+sudo gdbserver localhost:1234 fatfs
+```
+step 2: run gdb in vscode via json
+```
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/build/fatfs",
+            "args": [],
+            "stopAtConnect": false,
+            "cwd": "${workspaceRoot}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "miDebuggerServerAddress": "localhost:1234"
+        },
+    ]
+}
+```
+

@@ -6,7 +6,8 @@
 #include "performance_test.h"
 
 #define MAX_BLOCK_SIZE 16384 // Define the maximum block size
-#define TESTFILE_PATH "OTA_VBF:/abcdefg"
+#define IOTESTFILE_PATH "OTA_VBF:/iotest"
+#define SPEEDTESTFILE_PATH "OTA_VBF:/speedtest"
 
 static char buffer[MAX_BLOCK_SIZE]; // Static buffer with maximum block size
 void perform_file_io_test() {
@@ -26,7 +27,7 @@ void perform_file_io_test() {
         for (UINT i = 0; i < iterations; i++) {
             // Write test on OTA_VBF partition
             clock_t start_write = clock();
-            ret = f_open(&file, TESTFILE_PATH, FA_WRITE | FA_CREATE_ALWAYS); // Updated filename
+            ret = f_open(&file, IOTESTFILE_PATH, FA_WRITE | FA_CREATE_ALWAYS); // Updated filename
             if (ret == FR_OK) {
                 f_write(&file, buffer, block_size, &bw);
                 f_close(&file);
@@ -39,7 +40,7 @@ void perform_file_io_test() {
 
             // Read test on OTA_VBF partition
             clock_t start_read = clock();
-            ret = f_open(&file, TESTFILE_PATH, FA_READ); // Updated filename
+            ret = f_open(&file, IOTESTFILE_PATH, FA_READ); // Updated filename
             if (ret == FR_OK) {
                 f_read(&file, buffer, block_size, &br);
                 f_close(&file);
@@ -58,4 +59,49 @@ void perform_file_io_test() {
         printf("Read - Min: %.6f, Max: %.6f, Avg: %.6f\n",
                min_read_time, max_read_time, total_read_time / iterations);
     }
+}
+
+void perform_large_file_test() {
+    const UINT file_size = 16 * 1024 * 1024; // 16MB file size
+    const UINT block_size = 4096; // 4K block size
+    const double test_duration = 10.0; // 10 seconds test duration
+    FIL file;
+    FRESULT ret;
+    UINT bw, br;
+    memset(buffer, 0xFF, block_size); // Initialize buffer to 0xFF
+
+    // Write test
+    clock_t start_write = clock();
+    ret = f_open(&file, SPEEDTESTFILE_PATH, FA_WRITE | FA_CREATE_ALWAYS);
+    if (ret == FR_OK) {
+        UINT bytes_written = 0;
+        while (bytes_written < file_size) {
+            f_write(&file, buffer, block_size, &bw);
+            bytes_written += bw;
+        }
+        f_close(&file);
+    }
+    clock_t end_write = clock();
+    double write_time = ((double)(end_write - start_write)) / CLOCKS_PER_SEC;
+    double write_speed = (file_size / (1024.0 * 1024.0)) / write_time; // MB/s
+
+    // Read test
+    clock_t start_read = clock();
+    ret = f_open(&file, SPEEDTESTFILE_PATH, FA_READ);
+    if (ret == FR_OK) {
+        UINT bytes_read = 0;
+        while (bytes_read < file_size) {
+            f_read(&file, buffer, block_size, &br);
+            bytes_read += br;
+        }
+        f_close(&file);
+    }
+    clock_t end_read = clock();
+    double read_time = ((double)(end_read - start_read)) / CLOCKS_PER_SEC;
+    double read_speed = (file_size / (1024.0 * 1024.0)) / read_time; // MB/s
+
+    // Print results
+    printf("Large File Test (16MB, 4K blocks, 10s):\n");
+    printf("Write Speed: %.2f MB/s\n", write_speed);
+    printf("Read Speed: %.2f MB/s\n", read_speed);
 }
