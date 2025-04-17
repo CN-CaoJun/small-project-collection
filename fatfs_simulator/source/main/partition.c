@@ -6,7 +6,7 @@
 // #include "Platform_Types.h"
 
 extern int fd;
-static DWORD plist[] = {76, 8, 8, 8}; /* Divide drive into Four partitions */
+static DWORD plist[] = {76, 8, 8, 8}; /* Divide drive into four partitions */
 unsigned char work[4096];
 FATFS ffs0;
 FATFS ffs1;
@@ -58,12 +58,12 @@ int part_mount(void) {
     {
         if (f_fdisk(0, plist, work) != FR_OK)
         {
-            printf("无法初始化虚拟磁盘\n");
+            printf("Failed to initialize virtual disk\n");
             return 1;
         }
         else
         {
-            printf("初始化虚拟磁盘 成功\n");
+            printf("Virtual disk initialized successfully\n");
         }
 
         // Check the number of partitions
@@ -83,7 +83,9 @@ int part_mount(void) {
         ret |= f_mount(&ffs2, "RVDC:", 0);
         ret |= f_mount(&ffs3, "SAL:", 0);
 
-        if (ret != FR_OK) {
+        if (ret != FR_OK)
+         {
+            printf("Partitions are not formatted, formatting...\n");
             // Partitions are not formatted, proceed with formatting
             ret = f_mkfs("OTA_VBF:", &format_opt, work, 4096);
             ret |= f_mkfs("OTA_METADATA:", &format_opt, work, 4096);
@@ -91,14 +93,17 @@ int part_mount(void) {
             ret |= f_mkfs("SAL:", &format_opt, work, 4096);
             if (ret != FR_OK)
             {
-                printf("无法格式化文件系统\n");
+                printf("Failed to format filesystem\n");
                 return 1;
             }
             else
             {
-                printf("格式化文件系统 成功\n");
+                printf("Filesystem formatted successfully\n");
             }
-        } else {
+        } 
+        else 
+        {
+            printf("Filesystem already formatted\n");
             // Partitions are already formatted, unmount them first
             f_mount(NULL, "OTA_VBF:", 0);
             f_mount(NULL, "OTA_METADATA:", 0);
@@ -107,13 +112,13 @@ int part_mount(void) {
         }
     }
 
-    ret = f_mount(&ffs0, "OTA_VBF:", 1);       /* registers filesystem object to the FatFs module */
-    ret |= f_mount(&ffs1, "OTA_METADATA:", 1); /* registers filesystem object to the FatFs module */
-    ret |= f_mount(&ffs2, "RVDC:", 1);         /* registers filesystem object to the FatFs module */
-    ret |= f_mount(&ffs3, "SAL:", 1);          /* registers filesystem object to the FatFs module */
+    ret = f_mount(&ffs0, "OTA_VBF:", 1);       /* Registers filesystem object to the FatFs module */
+    ret |= f_mount(&ffs1, "OTA_METADATA:", 1); /* Registers filesystem object to the FatFs module */
+    ret |= f_mount(&ffs2, "RVDC:", 1);         /* Registers filesystem object to the FatFs module */
+    ret |= f_mount(&ffs3, "SAL:", 1);          /* Registers filesystem object to the FatFs module */
     if (ret != FR_OK)
     {
-        printf("无法挂载文件系统\n");
+        printf("Failed to mount filesystem\n");
         return 1;
     }
     else
@@ -126,7 +131,7 @@ int part_mount(void) {
             // f_mkdir(RVDC_INTERNAL_FILES_PATH);
         }
         
-        printf("挂载文件系统 成功\n");
+        printf("Filesystem mounted successfully\n");
         print_partitions(); // Print the contents of each partition
     }
     
@@ -135,11 +140,10 @@ int part_mount(void) {
 
 int part_umount(void)
 {
-    // 卸载文件系统
     f_mount(NULL, "OTA_VBF:", 0);
     f_mount(NULL, "OTA_METADATA:", 0);
     f_mount(NULL, "RVDC:", 0);
     f_mount(NULL, "SAL:", 0);
 
-    close(fd); // 关闭虚拟磁盘文件
+    close(fd); 
 }

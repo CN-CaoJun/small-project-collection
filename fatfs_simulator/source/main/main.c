@@ -15,13 +15,12 @@ int main() {
     {
         return -1;
     }
+    else
+    {
+        printf("mount ok\n");
+    }
 
-    ret = f_open(&file, "OTA_METADATA:/test", FA_CREATE_ALWAYS | FA_READ | FA_WRITE);
-    ret = f_write(&file, bufin, strlen(bufin), &bw);
-    f_lseek(&file, 0);
-    ret = f_read(&file, bufout, 12U, &bw);
-    ret = f_close(&file);
-    printf("%s\n", bufout);
+    printf("start to umount\n");
 
     part_umount();
 
