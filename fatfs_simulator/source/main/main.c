@@ -6,6 +6,9 @@
 #include "partition.h"
 #include "performance_test.h"
 
+#define MOUNT_SUCCESS 0
+#define MOUNT_FAILURE 1
+
 void* test_thread(void* arg) {
     // Perform I/O performance test
     perform_file_io_test();
@@ -18,7 +21,7 @@ int main() {
     FRESULT ret;
     pthread_t thread;
 
-    if (1 == part_mount()) {
+    if (MOUNT_FAILURE == part_mount()) {
         return -1;
     } else {
         printf("mount ok\n");
@@ -36,5 +39,5 @@ int main() {
     printf("start to umount\n");
     part_umount();
 
-    return 0;
+    return MOUNT_SUCCESS;
 }
