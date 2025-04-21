@@ -13,7 +13,7 @@ void* test_thread(void* arg) {
     // Perform I/O performance test
     perform_file_io_test();
     // Perform large file speed test
-    perform_large_file_test();
+    // perform_large_file_test();
     return NULL;
 }
 
