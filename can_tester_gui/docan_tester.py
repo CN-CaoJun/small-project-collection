@@ -12,6 +12,7 @@ import isotp
 import udsoncan
 from can.interfaces.vector import canlib, xlclass, xldefine
 from ecu_config import ECUConfig
+from datetime import datetime
 
 class DoCANTester(tk.Tk):
     def __init__(self):
@@ -108,8 +109,16 @@ class DoCANTester(tk.Tk):
         comm_frame = ttk.Frame(isotp_frame)
         comm_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
+        # 创建数据请求与响应框架
+        data_frame = ttk.LabelFrame(
+            comm_frame,
+            text="Data Request and Response",
+            padding=(5, 5)
+        )
+        data_frame.pack(fill=tk.BOTH, expand=True)
+        
         # 发送部分
-        send_frame = ttk.Frame(comm_frame)
+        send_frame = ttk.Frame(data_frame)
         send_frame.pack(fill=tk.X, pady=2)
         
         ttk.Label(send_frame, text="Data (hex):").pack(side=tk.LEFT)
@@ -127,14 +136,30 @@ class DoCANTester(tk.Tk):
         self.send_button.pack(side=tk.LEFT, padx=5)
         
         # 响应显示区域
-        ttk.Label(comm_frame, text="Response:").pack(anchor=tk.W, pady=(5,0))
-        self.response_text = tk.Text(comm_frame, height=6, wrap=tk.WORD)
-        self.response_text.pack(fill=tk.BOTH, expand=True)
+        # 消息追踪框
+        trace_frame = ttk.LabelFrame(
+            comm_frame,
+            text="Msg Trace of req and res",
+            padding=(5, 5)
+        )
+        trace_frame.pack(fill=tk.BOTH, expand=True)
+
+        # 追踪显示区域
+        trace_container = ttk.Frame(trace_frame)
+        trace_container.pack(fill=tk.BOTH, expand=True)
         
-        # 添加滚动条
-        scrollbar = ttk.Scrollbar(comm_frame, orient=tk.VERTICAL, command=self.response_text.yview)
+        ttk.Label(trace_container, text="Trace:").pack(anchor=tk.W, pady=(5,0))
+        self.trace_text = tk.Text(trace_container, height=10, wrap=tk.WORD)
+        self.trace_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # 添加滚动条到右侧
+        scrollbar = ttk.Scrollbar(trace_container, orient=tk.VERTICAL, command=self.trace_text.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.response_text.configure(yscrollcommand=scrollbar.set)
+        self.trace_text.configure(yscrollcommand=scrollbar.set)
+
+        response_container = ttk.Frame(data_frame)
+        response_container.pack(fill=tk.BOTH, expand=True)
+        
     def InitializeConnectionWidgets(self):
         # Create groupbox frame
         connection_frame = ttk.LabelFrame(
@@ -400,7 +425,6 @@ class DoCANTester(tk.Tk):
             self.init_button.configure(text="Initialize") 
 
     def send_isotp_data(self):
-        """发送ISOTP数据"""
         try:
             if not self.isotp_layer:
                 self.show_error("请先启动ISOTP层")
@@ -410,17 +434,23 @@ class DoCANTester(tk.Tk):
             hex_data = self.isotp_data_entry.get().replace(" ", "")
             data = bytes.fromhex(hex_data)
             
+            # 记录带时间的请求
+            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            self.trace_text.insert(tk.END, f"[{timestamp}] TX: {hex_data.upper()}\n")
+            
             # 发送数据
             self.isotp_layer.send(data)
             
             # 等待响应
             try:
                 response = self.isotp_layer.recv(timeout=1.0)
-                response_hex = ' '.join([hex(x)[2:].zfill(2) for x in response])
-                self.response_text.insert(tk.END, f"Response: {response_hex}\n")
-                self.response_text.see(tk.END)
+                response_hex = ' '.join([f"{x:02X}" for x in response])
+                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                self.trace_text.insert(tk.END, f"[{timestamp}] RX: {response_hex}\n")
+                self.trace_text.see(tk.END)
             except Exception as e:
-                self.response_text.insert(tk.END, f"No response received: {str(e)}\n")
+                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                self.trace_text.insert(tk.END, f"[{timestamp}] Error: {str(e)}\n")
                 
         except ValueError as e:
             self.show_error(f"参数格式错误: {str(e)}")
