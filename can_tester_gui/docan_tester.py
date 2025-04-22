@@ -11,6 +11,7 @@ import can
 import isotp
 import udsoncan
 from can.interfaces.vector import canlib, xlclass, xldefine
+from ecu_config import ECUConfig
 
 class DoCANTester(tk.Tk):
     def __init__(self):
@@ -29,6 +30,10 @@ class DoCANTester(tk.Tk):
         self.isotp_layer = None
         self.notifier = None
         
+        # 使用ECUConfig加载配置
+        self.ecu_config = ECUConfig()
+        self.ecu_id_map = self.ecu_config.get_ecu_map()
+        
         self.InitializeWidgets()
     def InitializeWidgets(self):
         self.InitializeConnectionWidgets()
@@ -43,57 +48,57 @@ class DoCANTester(tk.Tk):
         )
         isotp_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # 创建左侧配置框架
+        # 创建配置框架在顶部
         config_frame = ttk.LabelFrame(isotp_frame, text="Configuration", padding=(5, 5))
-        config_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+        config_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # 创建水平布局的配置区域
+        config_content = ttk.Frame(config_frame)
+        config_content.pack(fill=tk.X, padx=5, pady=2)
         
         # ID配置部分
-        id_frame = ttk.Frame(config_frame)
-        id_frame.pack(fill=tk.X, padx=5, pady=2)
+        id_frame = ttk.Frame(config_content)
+        id_frame.pack(side=tk.LEFT, padx=10)
         
-        ttk.Label(id_frame, text="TX ID (hex):").pack(side=tk.LEFT)
-        self.tx_id_entry = ttk.Entry(id_frame, width=6)
-        self.tx_id_entry.pack(side=tk.LEFT, padx=(2, 10))
-        self.tx_id_entry.insert(0, "749")
+        ttk.Label(id_frame, text="ECU:").pack(side=tk.LEFT)
+        self.ecu_combo = ttk.Combobox(id_frame, width=8, values=list(self.ecu_id_map.keys()))
+        self.ecu_combo.pack(side=tk.LEFT, padx=(2, 10))
+        self.ecu_combo.bind('<<ComboboxSelected>>', self.on_ecu_selected)
+        self.ecu_combo.set('IMS')  # 设置默认值
         
-        ttk.Label(id_frame, text="RX ID (hex):").pack(side=tk.LEFT)
-        self.rx_id_entry = ttk.Entry(id_frame, width=6)
-        self.rx_id_entry.pack(side=tk.LEFT, padx=(2, 10))
-        self.rx_id_entry.insert(0, "759")
+        ttk.Label(id_frame, text="TX ID:").pack(side=tk.LEFT)
+        self.tx_id_label = ttk.Label(id_frame, text="0x749")
+        self.tx_id_label.pack(side=tk.LEFT, padx=(2, 10))
         
+        ttk.Label(id_frame, text="RX ID:").pack(side=tk.LEFT)
+        self.rx_id_label = ttk.Label(id_frame, text="0x759")
+        self.rx_id_label.pack(side=tk.LEFT, padx=(2, 10))
+
         # ISOTP参数配置
-        params_frame = ttk.Frame(config_frame)
-        params_frame.pack(fill=tk.X, padx=5, pady=2)
+        params_frame = ttk.Frame(config_content)
+        params_frame.pack(side=tk.LEFT, padx=10)
         
-        # 第一行参数
-        row1_frame = ttk.Frame(params_frame)
-        row1_frame.pack(fill=tk.X, pady=2)
-        
-        ttk.Label(row1_frame, text="STmin:").pack(side=tk.LEFT)
-        self.stmin_entry = ttk.Entry(row1_frame, width=4)
+        ttk.Label(params_frame, text="STmin:").pack(side=tk.LEFT)
+        self.stmin_entry = ttk.Entry(params_frame, width=4)
         self.stmin_entry.pack(side=tk.LEFT, padx=(2, 10))
         self.stmin_entry.insert(0, "1")
         
-        ttk.Label(row1_frame, text="Block Size:").pack(side=tk.LEFT)
-        self.blocksize_entry = ttk.Entry(row1_frame, width=4)
+        ttk.Label(params_frame, text="Block Size:").pack(side=tk.LEFT)
+        self.blocksize_entry = ttk.Entry(params_frame, width=4)
         self.blocksize_entry.pack(side=tk.LEFT, padx=(2, 10))
         self.blocksize_entry.insert(0, "8")
         
-        # 第二行参数
-        row2_frame = ttk.Frame(params_frame)
-        row2_frame.pack(fill=tk.X, pady=2)
-        
-        ttk.Label(row2_frame, text="Padding:").pack(side=tk.LEFT)
-        self.padding_entry = ttk.Entry(row2_frame, width=4)
+        ttk.Label(params_frame, text="Padding:").pack(side=tk.LEFT)
+        self.padding_entry = ttk.Entry(params_frame, width=4)
         self.padding_entry.pack(side=tk.LEFT, padx=(2, 10))
         self.padding_entry.insert(0, "00")
         
-        
-        row3_frame = ttk.Frame(params_frame)
-        row3_frame.pack(fill=tk.X, pady=2)
+        # ISOTP控制按钮
+        control_frame = ttk.Frame(config_content)
+        control_frame.pack(side=tk.LEFT, padx=10)
         
         self.isotp_enable_button = ttk.Checkbutton(
-            row3_frame,
+            control_frame,
             text="Enable ISOTP",
             style="Toggle.TButton",
             command=self.on_isotp_toggle
@@ -111,7 +116,8 @@ class DoCANTester(tk.Tk):
         ttk.Label(send_frame, text="Data (hex):").pack(side=tk.LEFT)
         self.isotp_data_entry = ttk.Entry(send_frame, width=50)
         self.isotp_data_entry.pack(side=tk.LEFT, padx=2)
-        
+        # 添加输入验证和格式化
+        self.format_hex_input(self.isotp_data_entry.bind('<KeyRelease>', self.format_hex_input))
         self.send_button = ttk.Button(
             send_frame, 
             text="Send",
@@ -257,7 +263,17 @@ class DoCANTester(tk.Tk):
         
         ok_button = ttk.Button(error_window, text="OK", command=error_window.destroy) 
         ok_button.pack(pady=10)
-
+    def format_hex_input(self, event):
+        # """格式化十六进制输入，每两个字符之间添加空格"""
+        # 获取当前输入内容并移除所有空格
+        content = self.isotp_data_entry.get().replace(" ", "")
+        # 移除非十六进制字符
+        content = ''.join(c for c in content if c in '0123456789ABCDEFabcdef')
+        # 每两个字符添加一个空格
+        formatted = ' '.join(content[i:i+2] for i in range(0, len(content), 2))
+        # 更新Entry的内容
+        self.isotp_data_entry.delete(0, tk.END)
+        self.isotp_data_entry.insert(0, formatted)
     def parse_baudrate_parameters(self):
         params = {}
         try:
@@ -450,6 +466,18 @@ class DoCANTester(tk.Tk):
             self.release_can()
             self.init_button.configure(text="Initialize") 
 
+    def on_ecu_selected(self, event):
+        """处理ECU选择变化"""
+        selected_ecu = self.ecu_combo.get()
+        if selected_ecu in self.ecu_id_map:
+            ecu_ids = self.ecu_id_map[selected_ecu]
+            self.tx_id_label.configure(text=f"0x{ecu_ids['TXID']:03X}")
+            self.rx_id_label.configure(text=f"0x{ecu_ids['RXID']:03X}")
+            # 打印选择的ECU ID信息
+            print(f"Selected ECU: {selected_ecu}")
+            print(f"TX ID: 0x{ecu_ids['TXID']:03X}")
+            print(f"RX ID: 0x{ecu_ids['RXID']:03X}")
+
     def on_isotp_toggle(self):
         """处理ISOTP Enable按钮的状态变化"""
         if self.isotp_enable_button.instate(['selected']):
@@ -464,9 +492,16 @@ class DoCANTester(tk.Tk):
                 self.show_error("请先初始化CAN通道")
                 return
             
-            # 获取并解析参数
-            tx_id = int(self.tx_id_entry.get(), 16)
-            rx_id = int(self.rx_id_entry.get(), 16)
+            # 获取当前选择的ECU的ID
+            selected_ecu = self.ecu_combo.get()
+            if selected_ecu not in self.ecu_id_map:
+                self.show_error("请选择有效的ECU")
+                return
+            
+            ecu_ids = self.ecu_id_map[selected_ecu]
+            tx_id = ecu_ids['TXID']
+            rx_id = ecu_ids['RXID']
+            
             stmin = int(self.stmin_entry.get())
             blocksize = int(self.blocksize_entry.get())
             padding = int(self.padding_entry.get(), 16)
@@ -532,3 +567,4 @@ class DoCANTester(tk.Tk):
 if __name__ == "__main__":
     app = DoCANTester()
     app.mainloop()
+
