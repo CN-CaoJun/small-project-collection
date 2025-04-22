@@ -25,10 +25,111 @@ class DoCANTester(tk.Tk):
         # Store channel configuration information
         self.channel_configs = {}
         
+        # 添加ISOTP相关属性
+        self.isotp_layer = None
+        self.notifier = None
+        
         self.InitializeWidgets()
     def InitializeWidgets(self):
         self.InitializeConnectionWidgets()
+        self.InitializeISOTPConsole()
+
+    def InitializeISOTPConsole(self):
+        # 创建ISOTP Console框架
+        isotp_frame = ttk.LabelFrame(
+            self.main_frame, 
+            text="ISOTP Console",
+            padding=(5, 5)
+        )
+        isotp_frame.pack(fill=tk.X, padx=5, pady=5)
         
+        # 创建左侧配置框架
+        config_frame = ttk.LabelFrame(isotp_frame, text="Configuration", padding=(5, 5))
+        config_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+        
+        # ID配置部分
+        id_frame = ttk.Frame(config_frame)
+        id_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        ttk.Label(id_frame, text="TX ID (hex):").pack(side=tk.LEFT)
+        self.tx_id_entry = ttk.Entry(id_frame, width=6)
+        self.tx_id_entry.pack(side=tk.LEFT, padx=(2, 10))
+        self.tx_id_entry.insert(0, "749")
+        
+        ttk.Label(id_frame, text="RX ID (hex):").pack(side=tk.LEFT)
+        self.rx_id_entry = ttk.Entry(id_frame, width=6)
+        self.rx_id_entry.pack(side=tk.LEFT, padx=(2, 10))
+        self.rx_id_entry.insert(0, "759")
+        
+        # ISOTP参数配置
+        params_frame = ttk.Frame(config_frame)
+        params_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        # 第一行参数
+        row1_frame = ttk.Frame(params_frame)
+        row1_frame.pack(fill=tk.X, pady=2)
+        
+        ttk.Label(row1_frame, text="STmin:").pack(side=tk.LEFT)
+        self.stmin_entry = ttk.Entry(row1_frame, width=4)
+        self.stmin_entry.pack(side=tk.LEFT, padx=(2, 10))
+        self.stmin_entry.insert(0, "1")
+        
+        ttk.Label(row1_frame, text="Block Size:").pack(side=tk.LEFT)
+        self.blocksize_entry = ttk.Entry(row1_frame, width=4)
+        self.blocksize_entry.pack(side=tk.LEFT, padx=(2, 10))
+        self.blocksize_entry.insert(0, "8")
+        
+        # 第二行参数
+        row2_frame = ttk.Frame(params_frame)
+        row2_frame.pack(fill=tk.X, pady=2)
+        
+        ttk.Label(row2_frame, text="Padding:").pack(side=tk.LEFT)
+        self.padding_entry = ttk.Entry(row2_frame, width=4)
+        self.padding_entry.pack(side=tk.LEFT, padx=(2, 10))
+        self.padding_entry.insert(0, "00")
+        
+        
+        row3_frame = ttk.Frame(params_frame)
+        row3_frame.pack(fill=tk.X, pady=2)
+        
+        self.isotp_enable_button = ttk.Checkbutton(
+            row3_frame,
+            text="Enable ISOTP",
+            style="Toggle.TButton",
+            command=self.on_isotp_toggle
+        )
+        self.isotp_enable_button.pack(side=tk.LEFT)
+        
+        # 创建右侧发送/接收框架
+        comm_frame = ttk.Frame(isotp_frame)
+        comm_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # 发送部分
+        send_frame = ttk.Frame(comm_frame)
+        send_frame.pack(fill=tk.X, pady=2)
+        
+        ttk.Label(send_frame, text="Data (hex):").pack(side=tk.LEFT)
+        self.isotp_data_entry = ttk.Entry(send_frame, width=50)
+        self.isotp_data_entry.pack(side=tk.LEFT, padx=2)
+        
+        self.send_button = ttk.Button(
+            send_frame, 
+            text="Send",
+            width=8,
+            command=self.send_isotp_data,
+            state='disabled'
+        )
+        self.send_button.pack(side=tk.LEFT, padx=5)
+        
+        # 响应显示区域
+        ttk.Label(comm_frame, text="Response:").pack(anchor=tk.W, pady=(5,0))
+        self.response_text = tk.Text(comm_frame, height=6, wrap=tk.WORD)
+        self.response_text.pack(fill=tk.BOTH, expand=True)
+        
+        # 添加滚动条
+        scrollbar = ttk.Scrollbar(comm_frame, orient=tk.VERTICAL, command=self.response_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.response_text.configure(yscrollcommand=scrollbar.set)
     def InitializeConnectionWidgets(self):
         # Create groupbox frame
         connection_frame = ttk.LabelFrame(
@@ -240,8 +341,13 @@ class DoCANTester(tk.Tk):
             self.baudrate_entry.configure(state='disabled')
             self.canfd_check.configure(state='disabled')
             
+            # 启用ISOTP Enable按钮
+            self.isotp_enable_button.configure(state='normal')
             
             print(f"CAN channel initialized successfully: {selected_channel} (ID: {channel_config.hw_channel})")
+        
+            # 启用ISOTP发送按钮
+            self.send_button.configure(state='normal')
             
         except Exception as e:
             self.show_error(f"Failed to initialize CAN channel: {str(e)}")
@@ -277,6 +383,151 @@ class DoCANTester(tk.Tk):
         else:
             self.release_can()
             self.init_button.configure(text="Initialize") 
+
+    def send_isotp_data(self):
+        """发送ISOTP数据"""
+        try:
+            if not self.isotp_layer:
+                self.show_error("请先启动ISOTP层")
+                return
+            
+            # 获取并解析十六进制数据
+            hex_data = self.isotp_data_entry.get().replace(" ", "")
+            data = bytes.fromhex(hex_data)
+            
+            # 发送数据
+            self.isotp_layer.send(data)
+            
+            # 等待响应
+            try:
+                response = self.isotp_layer.recv(timeout=1.0)
+                response_hex = ' '.join([hex(x)[2:].zfill(2) for x in response])
+                self.response_text.insert(tk.END, f"Response: {response_hex}\n")
+                self.response_text.see(tk.END)
+            except Exception as e:
+                self.response_text.insert(tk.END, f"No response received: {str(e)}\n")
+                
+        except ValueError as e:
+            self.show_error(f"参数格式错误: {str(e)}")
+        except Exception as e:
+            self.show_error(f"发送ISOTP数据失败: {str(e)}")
+            
+    def release_can(self):
+        # 停止ISOTP层
+        if self.isotp_layer:
+            self.stop_isotp()
+            self.isotp_enable_button.state(['!selected'])
+        
+        # 禁用ISOTP Enable按钮
+        self.isotp_enable_button.configure(state='disabled')
+        
+        try:
+            if self.can_bus:
+                self.can_bus.shutdown()
+                self.can_bus = None
+                
+            # Enable all controls in connection frame
+            self.hardware_combo.configure(state='normal')
+            self.scan_button.configure(state='normal')
+            self.baudrate_entry.configure(state='normal')
+            self.canfd_check.configure(state='normal')
+            
+            print("CAN channel released")
+            
+        except Exception as e:
+            self.show_error(f"Failed to release CAN channel: {str(e)}")
+
+    def on_init_toggle(self):
+        """处理Initialize toggle按钮的状态变化"""
+        if self.init_button.instate(['selected']):
+            self.initialize_can()
+            if not self.can_bus:  
+                self.init_button.state(['!selected'])  
+                self.init_button.configure(text="Initialize")
+            else:
+                self.init_button.configure(text="Release")  
+        else:
+            self.release_can()
+            self.init_button.configure(text="Initialize") 
+
+    def on_isotp_toggle(self):
+        """处理ISOTP Enable按钮的状态变化"""
+        if self.isotp_enable_button.instate(['selected']):
+            self.start_isotp()
+        else:
+            self.stop_isotp()
+    
+    def start_isotp(self):
+        """启动ISOTP层"""
+        try:
+            if not self.can_bus:
+                self.show_error("请先初始化CAN通道")
+                return
+            
+            # 获取并解析参数
+            tx_id = int(self.tx_id_entry.get(), 16)
+            rx_id = int(self.rx_id_entry.get(), 16)
+            stmin = int(self.stmin_entry.get())
+            blocksize = int(self.blocksize_entry.get())
+            padding = int(self.padding_entry.get(), 16)
+            
+            # 创建ISOTP参数
+            isotp_params = {
+                'stmin': stmin,
+                'blocksize': blocksize,
+                'tx_padding': padding,
+                'rx_flowcontrol_timeout': 1000,
+                'rx_consecutive_frame_timeout': 100,
+                'can_fd': self.canfd_var.get()
+            }
+            
+            # 创建地址对象
+            tp_addr = isotp.Address(
+                isotp.AddressingMode.Normal_11bits,
+                txid=tx_id,
+                rxid=rx_id
+            )
+            
+            # 创建通知器
+            self.notifier = can.Notifier(self.can_bus, [])
+            
+            # 创建ISOTP层
+            self.isotp_layer = isotp.NotifierBasedCanStack(
+                bus=self.can_bus,
+                notifier=self.notifier,
+                address=tp_addr,
+                error_handler=None,
+                params=isotp_params
+            )
+            
+            # 启动ISOTP层
+            self.isotp_layer.start()
+            
+            # 启用发送按钮
+            self.send_button.configure(state='normal')
+            print("ISOTP layer started")
+            
+        except Exception as e:
+            self.show_error(f"启动ISOTP层失败: {str(e)}")
+            self.isotp_enable_button.state(['!selected'])
+    
+    def stop_isotp(self):
+        """停止ISOTP层"""
+        try:
+            if self.isotp_layer:
+                self.isotp_layer.stop()
+                self.isotp_layer = None
+            
+            if self.notifier:
+                self.notifier.stop()
+                self.notifier = None
+            
+            # 禁用发送按钮
+            self.send_button.configure(state='disabled')
+            print("ISOTP layer stopped")
+            
+        except Exception as e:
+            self.show_error(f"停止ISOTP层失败: {str(e)}")
 
 if __name__ == "__main__":
     app = DoCANTester()
