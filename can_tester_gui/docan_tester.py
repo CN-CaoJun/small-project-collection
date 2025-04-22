@@ -13,12 +13,13 @@ import udsoncan
 from can.interfaces.vector import canlib, xlclass, xldefine
 from ecu_config import ECUConfig
 from datetime import datetime
+import threading
 
 class DoCANTester(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("IMS Tester ")
-        self.geometry("800x600")
+        self.geometry("780x600")
         self.main_frame = ttk.Frame(self)
         self.main_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
         
@@ -424,6 +425,107 @@ class DoCANTester(tk.Tk):
             self.release_can()
             self.init_button.configure(text="Initialize") 
 
+    def start_isotp(self):
+        """启动ISOTP层"""
+        try:
+            if not self.can_bus:
+                self.show_error("请先初始化CAN通道")
+                return
+            
+            # 获取当前选择的ECU的ID
+            selected_ecu = self.ecu_combo.get()
+            if selected_ecu not in self.ecu_id_map:
+                self.show_error("请选择有效的ECU")
+                return
+            
+            ecu_ids = self.ecu_id_map[selected_ecu]
+            tx_id = ecu_ids['TXID']
+            rx_id = ecu_ids['RXID']
+            
+            stmin = int(self.stmin_entry.get())
+            blocksize = int(self.blocksize_entry.get())
+            padding = int(self.padding_entry.get(), 16)
+            
+            # 创建ISOTP参数
+            isotp_params = {
+                'stmin': stmin,
+                'blocksize': blocksize,
+                'tx_padding': padding,
+                'rx_flowcontrol_timeout': 1000,
+                'rx_consecutive_frame_timeout': 100,
+                'can_fd': self.canfd_var.get()
+            }
+            
+            # 创建地址对象
+            tp_addr = isotp.Address(
+                isotp.AddressingMode.Normal_11bits,
+                txid=tx_id,
+                rxid=rx_id
+            )
+            
+            # 创建通知器
+            self.notifier = can.Notifier(self.can_bus, [])
+            
+            # 创建ISOTP层
+            self.isotp_layer = isotp.NotifierBasedCanStack(
+                bus=self.can_bus,
+                notifier=self.notifier,
+                address=tp_addr,
+                error_handler=None,
+                params=isotp_params
+            )
+            
+            # 启动ISOTP层
+            self.isotp_layer.start()
+            
+            # 启用发送按钮
+            self.send_button.configure(state='normal')
+            
+            # 创建接收线程
+            self.receive_thread = threading.Thread(target=self.receive_loop, daemon=True)
+            self.receive_active = True
+            self.receive_thread.start()
+            print("ISOTP layer started")
+
+        except Exception as e:
+            self.show_error(f"启动ISOTP失败: {str(e)}")
+            self.isotp_enable_button.state(['!selected'])
+
+    def stop_isotp(self):
+        """停止ISOTP层"""
+        if hasattr(self, 'receive_thread'):
+            self.receive_active = False
+            self.receive_thread.join(timeout=1)
+        if self.isotp_layer:
+            self.isotp_layer.stop()
+            self.isotp_layer = None
+        
+        if self.notifier:
+            self.notifier.stop()
+            self.notifier = None
+        
+        # 禁用发送按钮
+        self.send_button.configure(state='disabled')
+        print("ISOTP layer stopped")
+        
+    def receive_loop(self):
+        """后台接收线程循环"""
+        while self.receive_active and self.isotp_layer:
+            try:
+                response = self.isotp_layer.recv(timeout=0.01)
+                if response:
+                    response_hex = ' '.join(f"{x:02X}" for x in response)
+                    timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                    self.after(0, self.update_trace, f"[{timestamp}] RX: {response_hex}\n")
+            except Exception as e:
+                if self.receive_active:  # 仅记录活动状态下的错误
+                    timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                    self.after(0, self.update_trace, f"[{timestamp}] Error: {str(e)}\n")
+
+    def update_trace(self, message):
+        self.trace_text.insert(tk.END, message)
+        self.trace_text.see(tk.END)
+
     def send_isotp_data(self):
         try:
             if not self.isotp_layer:
@@ -438,19 +540,8 @@ class DoCANTester(tk.Tk):
             timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             self.trace_text.insert(tk.END, f"[{timestamp}] TX: {hex_data.upper()}\n")
             
-            # 发送数据
+            # 发送数据（非阻塞）
             self.isotp_layer.send(data)
-            
-            # 等待响应
-            try:
-                response = self.isotp_layer.recv(timeout=1.0)
-                response_hex = ' '.join([f"{x:02X}" for x in response])
-                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                self.trace_text.insert(tk.END, f"[{timestamp}] RX: {response_hex}\n")
-                self.trace_text.see(tk.END)
-            except Exception as e:
-                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                self.trace_text.insert(tk.END, f"[{timestamp}] Error: {str(e)}\n")
                 
         except ValueError as e:
             self.show_error(f"参数格式错误: {str(e)}")
@@ -513,85 +604,6 @@ class DoCANTester(tk.Tk):
             self.start_isotp()
         else:
             self.stop_isotp()
-    
-    def start_isotp(self):
-        """启动ISOTP层"""
-        try:
-            if not self.can_bus:
-                self.show_error("请先初始化CAN通道")
-                return
-            
-            # 获取当前选择的ECU的ID
-            selected_ecu = self.ecu_combo.get()
-            if selected_ecu not in self.ecu_id_map:
-                self.show_error("请选择有效的ECU")
-                return
-            
-            ecu_ids = self.ecu_id_map[selected_ecu]
-            tx_id = ecu_ids['TXID']
-            rx_id = ecu_ids['RXID']
-            
-            stmin = int(self.stmin_entry.get())
-            blocksize = int(self.blocksize_entry.get())
-            padding = int(self.padding_entry.get(), 16)
-            
-            # 创建ISOTP参数
-            isotp_params = {
-                'stmin': stmin,
-                'blocksize': blocksize,
-                'tx_padding': padding,
-                'rx_flowcontrol_timeout': 1000,
-                'rx_consecutive_frame_timeout': 100,
-                'can_fd': self.canfd_var.get()
-            }
-            
-            # 创建地址对象
-            tp_addr = isotp.Address(
-                isotp.AddressingMode.Normal_11bits,
-                txid=tx_id,
-                rxid=rx_id
-            )
-            
-            # 创建通知器
-            self.notifier = can.Notifier(self.can_bus, [])
-            
-            # 创建ISOTP层
-            self.isotp_layer = isotp.NotifierBasedCanStack(
-                bus=self.can_bus,
-                notifier=self.notifier,
-                address=tp_addr,
-                error_handler=None,
-                params=isotp_params
-            )
-            
-            # 启动ISOTP层
-            self.isotp_layer.start()
-            
-            # 启用发送按钮
-            self.send_button.configure(state='normal')
-            print("ISOTP layer started")
-            
-        except Exception as e:
-            self.show_error(f"启动ISOTP层失败: {str(e)}")
-            self.isotp_enable_button.state(['!selected'])
-    
-    def stop_isotp(self):
-        """停止ISOTP层"""
-        try:
-            if self.isotp_layer:
-                self.isotp_layer.stop()
-                self.isotp_layer = None
-            
-            if self.notifier:
-                self.notifier.stop()
-                self.notifier = None
-            
-            # 禁用发送按钮
-            self.send_button.configure(state='disabled')
-            print("ISOTP layer stopped")
-            
-        except Exception as e:
-            self.show_error(f"停止ISOTP层失败: {str(e)}")
 
 if __name__ == "__main__":
     app = DoCANTester()
