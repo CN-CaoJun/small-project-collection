@@ -13,7 +13,7 @@ class VectorScanner(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Vector Channel Scanner")
-        self.geometry("600x400")
+        self.geometry("1024x768")
 
         # Create main frame
         self.main_frame = ttk.Frame(self)
