@@ -37,9 +37,9 @@ class DoCANTester(tk.Tk):
         self.InitializeWidgets()
     def InitializeWidgets(self):
         self.InitializeConnectionWidgets()
-        self.InitializeISOTPConsole()
+        self.InitializeISOTPConsoleWidgets()
 
-    def InitializeISOTPConsole(self):
+    def InitializeISOTPConsoleWidgets(self):
         # 创建ISOTP Console框架
         isotp_frame = ttk.LabelFrame(
             self.main_frame, 
@@ -48,13 +48,12 @@ class DoCANTester(tk.Tk):
         )
         isotp_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # 创建配置框架在顶部
         config_frame = ttk.LabelFrame(isotp_frame, text="Configuration", padding=(5, 5))
         config_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # 创建水平布局的配置区域
         config_content = ttk.Frame(config_frame)
-        config_content.pack(fill=tk.X, padx=5, pady=2)
+        config_content.pack(fill=tk.X, padx=0, pady=2)
         
         # ID配置部分
         id_frame = ttk.Frame(config_content)
