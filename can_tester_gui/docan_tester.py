@@ -16,8 +16,7 @@ class DoCANTester(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("IMS Tester ")
-        self.geometry("1280x768")
-        sv_ttk.set_theme("light") 
+        self.geometry("800x600")
         self.main_frame = ttk.Frame(self)
         self.main_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
         
@@ -52,10 +51,10 @@ class DoCANTester(tk.Tk):
         hw_control_frame = ttk.Frame(hw_frame)
         hw_control_frame.pack(anchor=tk.W)
         
-        self.hardware_combo = ttk.Combobox(hw_control_frame, values=[" "], width=16)
+        self.hardware_combo = ttk.Combobox(hw_control_frame, values=[" "], width=24)
         self.hardware_combo.pack(side=tk.LEFT, padx=(0, 2))
-        self.refresh_button = ttk.Button(hw_control_frame, text="Refresh", width=8, command=self.scan_vector_channels)
-        self.refresh_button.pack(side=tk.LEFT)
+        self.scan_button = ttk.Button(hw_control_frame, text="Scan", width=8, command=self.scan_vector_channels)
+        self.scan_button.pack(side=tk.LEFT)
         
         # Baudrate section
         baud_frame = ttk.Frame(controls_frame)
@@ -82,10 +81,23 @@ class DoCANTester(tk.Tk):
         button_frame = ttk.Frame(controls_frame)
         button_frame.pack(side=tk.LEFT, padx=5)
         ttk.Label(button_frame, text="Operation:").pack(anchor=tk.W)
-        self.init_button = ttk.Button(button_frame, text="Initialize", width=8, command=self.initialize_can)
+        
+        self.style = ttk.Style()
+        self.style.configure("Toggle.TButton", 
+                           background="gray",
+                           foreground="black")
+        self.style.map("Toggle.TButton",
+                      background=[("selected", "green"), ("!selected", "gray")],
+                      foreground=[("selected", "white"), ("!selected", "black")])
+        
+        self.init_button = ttk.Checkbutton(
+            button_frame, 
+            text="Initialize",
+            width=8,
+            style="Toggle.TButton",
+            command=self.on_init_toggle
+        )
         self.init_button.pack(side=tk.LEFT, padx=2)
-        self.release_button = ttk.Button(button_frame, text="Release", width=8, command=self.release_can)
-        self.release_button.pack(side=tk.LEFT, padx=2)
     
     def scan_vector_channels(self):
         try:
@@ -218,17 +230,22 @@ class DoCANTester(tk.Tk):
                 self.can_bus.shutdown()
                 
             self.can_bus = canlib.VectorBus(
-                channel=channel_config.hw_channel,  # Use hardware channel number
+                channel=channel_config.hw_channel,
                 **params
             )
             
-            self.init_button.configure(state='disabled')
-            self.release_button.configure(state='normal')
+            # Disable all controls in connection frame
+            self.hardware_combo.configure(state='disabled')
+            self.scan_button.configure(state='disabled')
+            self.baudrate_entry.configure(state='disabled')
+            self.canfd_check.configure(state='disabled')
+            
             
             print(f"CAN channel initialized successfully: {selected_channel} (ID: {channel_config.hw_channel})")
             
         except Exception as e:
             self.show_error(f"Failed to initialize CAN channel: {str(e)}")
+            self.init_button.state(['!selected'])  
             
     def release_can(self):
         """Release CAN channel"""
@@ -237,14 +254,29 @@ class DoCANTester(tk.Tk):
                 self.can_bus.shutdown()
                 self.can_bus = None
                 
-            # Enable initialize button, disable release button
-            self.init_button.configure(state='normal')
-            self.release_button.configure(state='disabled')
+            # Enable all controls in connection frame
+            self.hardware_combo.configure(state='normal')
+            self.scan_button.configure(state='normal')
+            self.baudrate_entry.configure(state='normal')
+            self.canfd_check.configure(state='normal')
             
             print("CAN channel released")
             
         except Exception as e:
             self.show_error(f"Failed to release CAN channel: {str(e)}")
+
+    def on_init_toggle(self):
+        """处理Initialize toggle按钮的状态变化"""
+        if self.init_button.instate(['selected']):
+            self.initialize_can()
+            if not self.can_bus:  
+                self.init_button.state(['!selected'])  
+                self.init_button.configure(text="Initialize")
+            else:
+                self.init_button.configure(text="Release")  
+        else:
+            self.release_can()
+            self.init_button.configure(text="Initialize") 
 
 if __name__ == "__main__":
     app = DoCANTester()
