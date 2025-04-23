@@ -20,8 +20,8 @@ class MainWindow(tk.Tk):
     def __init__(self):
         super().__init__()
         
-        self.title("ECU Tester ToolBox")
-        self.geometry("800x600")
+        self.title("Diagnostic ToolBox")
+        self.geometry("746x600")
         
         # 创建主框架
         self.main_frame = ttk.Frame(self)
@@ -42,7 +42,7 @@ class MainWindow(tk.Tk):
         # 初始化各个功能模块
         self.init_connection_pack()
         self.init_diagnostic_pack()
-        # self.init_bootloader_pack()
+        self.init_bootloader_pack()
     
     def init_connection_pack(self):
         from ConnectionPack import ConnectionPack

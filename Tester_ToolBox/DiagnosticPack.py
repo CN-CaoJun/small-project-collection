@@ -113,8 +113,15 @@ class DiagnosticPack:
                                  validatecommand=(self.parent.register(self.on_hex_input), '%P'))
         self.msg_input.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         
-        # 添加输入格式提示
-        ttk.Label(self.input_container, text="(十六进制格式，例: 11 22 33)").pack(side=tk.LEFT)
+        ttk.Label(self.input_container, text="(Hex: 11 22 33)").pack(side=tk.LEFT)
+        # 添加保持会话按钮
+        self.keep_alive_button = ttk.Checkbutton(
+            self.input_container,
+            text="Keep Alive: OFF",
+            style="Toggle.TButton",
+            command=self.on_keep_alive
+        )
+        self.keep_alive_button.pack(side=tk.LEFT, padx=(0, 5))
         
         # 发送按钮
         self.send_button = ttk.Button(self.input_container, text="Send", command=self.send_message)
@@ -131,12 +138,24 @@ class DiagnosticPack:
     def on_enable_diag(self):
         """处理Enable Diag按钮的状态变化"""
         if self.enable_button.instate(['selected']):
+            # 禁用所有参数输入控件
+            for child in self.params_container.winfo_children():
+                if isinstance(child, (ttk.Entry, ttk.Frame)):
+                    for widget in child.winfo_children():
+                        if isinstance(widget, ttk.Entry):
+                            widget.configure(state='disabled')
             self.initialize_tp_layer()
             if not self.tp_stack:
                 self.enable_button.state(['!selected'])
             else:
                 self.send_button.configure(state='normal')
         else:
+            # 启用所有参数输入控件
+            for child in self.params_container.winfo_children():
+                if isinstance(child, (ttk.Entry, ttk.Frame)):
+                    for widget in child.winfo_children():
+                        if isinstance(widget, ttk.Entry):
+                            widget.configure(state='normal')
             self.release_tp_layer()
             self.send_button.configure(state='disabled')
             
@@ -148,7 +167,7 @@ class DiagnosticPack:
             can_bus = main_window.connection.get_can_bus()
             
             if not can_bus:
-                self.msg_display.insert(tk.END, "错误：CAN总线未初始化\n")
+                self.msg_display.insert(tk.END, "ERROR：CAN总线未初始化\n")
                 return
                 
             # 获取TP层参数
@@ -194,12 +213,12 @@ class DiagnosticPack:
             self.receive_thread = threading.Thread(target=self.receive_loop, daemon=True)
             self.receive_thread.start()
             
-            self.msg_display.insert(tk.END, f"ISO-TP层初始化成功\n")
-            self.msg_display.insert(tk.END, f"TXID: 0x{txid:03X}, RXID: 0x{rxid:03X}\n")
+            self.msg_display.insert(tk.END, f"ISO-TP Layer init success -- ")
+            self.msg_display.insert(tk.END, f"Request ID: 0x{txid:03X}, Response ID: 0x{rxid:03X}\n")
             self.msg_display.see(tk.END)
             
         except Exception as e:
-            self.msg_display.insert(tk.END, f"错误：{str(e)}\n")
+            self.msg_display.insert(tk.END, f"ERROR：{str(e)}\n")
             self.msg_display.see(tk.END)
             
     def release_tp_layer(self):
@@ -211,49 +230,50 @@ class DiagnosticPack:
         
         if self.tp_stack:
             self.tp_stack.stop()  # 停止 ISO-TP 栈
-            self.tp_stack.shutdown()
             self.tp_stack = None
             
             if hasattr(self, 'notifier'):
                 self.notifier.stop()  # 停止 notifier
                 self.notifier = None
                 
-            self.msg_display.insert(tk.END, "ISO-TP层已释放\n")
+            self.msg_display.insert(tk.END, "ISO-TP Layer released\n")
             self.msg_display.see(tk.END)
             
     def send_message(self):
         """发送诊断消息"""
         try:
             if not self.tp_stack:
-                self.msg_display.insert(tk.END, "错误：ISO-TP层未初始化\n")
+                self.msg_display.insert(tk.END, "ERROR：ISO-TP Layer no init\n")
                 return
                 
             # 获取并解析十六进制数据
             hex_str = self.msg_input.get().replace(" ", "")
             if not hex_str:
-                self.msg_display.insert(tk.END, "错误：请输入要发送的十六进制消息\n")
+                self.msg_display.insert(tk.END, "ERROR：请输入十六进制数据\n")
                 return
                 
+            # 自动补零处理奇数长度
             if len(hex_str) % 2 != 0:
-                self.msg_display.insert(tk.END, "错误：十六进制长度必须为偶数\n")
-                return
+                last_nibble = hex_str[-1]  # 获取最后半字节
+                hex_str = hex_str[:-1] + f"{int(last_nibble, 16):02X}"  # 高位补零
+                # self.msg_display.insert(tk.END, f"注意：已补高位零 → {' '.join(hex_str[i:i+2] for i in range(0, len(hex_str), 2))}\n")
                 
             try:
                 data = bytes.fromhex(hex_str)
             except ValueError as e:
-                self.msg_display.insert(tk.END, f"错误：无效的十六进制数据 - {str(e)}\n")
+                self.msg_display.insert(tk.END, f"ERROR：无效的十六进制数据 - {str(e)}\n")
                 return
                 
             # 发送消息
             self.tp_stack.send(data)
             
             # 显示发送信息（添加时间戳）
-            timestamp = datetime.now().strftime("%H:%M:%S.%f")
-            self.msg_display.insert(tk.END, f"[{timestamp}] 发送消息：{hex_str.upper()}\n")
+            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            self.msg_display.insert(tk.END, f"[{timestamp}] Req: {hex_str.upper()}\n")
             self.msg_display.see(tk.END)
             
         except Exception as e:
-            self.msg_display.insert(tk.END, f"错误：{str(e)}\n")
+            self.msg_display.insert(tk.END, f"ERROR：{str(e)}\n")
             self.msg_display.see(tk.END)
     def receive_loop(self):
         """后台接收线程循环"""
@@ -268,19 +288,19 @@ class DiagnosticPack:
                 if self.receive_active:
                     error_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                     self.parent.after(0, self.show_error, 
-                                    f"[{error_time}] 接收错误：{str(e)}")
+                                    f"[{error_time}] Recv ERROR：{str(e)}")
 
     def update_display(self, data, timestamp):
         """更新显示内容（主线程执行）"""
         try:
             hex_str = ' '.join(f"{b:02X}" for b in data)
-            self.msg_display.insert(tk.END, f"[{timestamp}] 收到报文：{hex_str}\n")
+            self.msg_display.insert(tk.END, f"[{timestamp}] Res: {hex_str}\n")
             self.msg_display.see(tk.END)
         except Exception as e:
-            self.show_error(f"显示错误：{str(e)}")
+            self.show_error(f"Display ERROR：{str(e)}")
             
     def show_error(self, error_msg):
-        """显示错误信息"""
+        """显示ERROR信息"""
         self.msg_display.insert(tk.END, f"{error_msg}\n")
         self.msg_display.see(tk.END)
 
@@ -295,3 +315,49 @@ class DiagnosticPack:
         self.msg_input.delete(0, tk.END)
         self.msg_input.insert(0, formatted.strip())
         return False  # 阻止默认处理
+    def format_hex_input(self, event):
+        """处理键盘释放事件后的格式化"""
+        content = self.msg_input.get().replace(" ", "")
+        # 移除非十六进制字符
+        content = ''.join(c for c in content if c in '0123456789ABCDEF')
+        # 每两个字符添加一个空格
+        formatted = ' '.join(content[i:i+2] for i in range(0, len(content), 2))
+        # 更新Entry的内容
+        self.msg_input.delete(0, tk.END)
+        self.msg_input.insert(0, formatted)
+        self.msg_input.bind('<KeyRelease>', self.format_hex_input)  # 添加KeyRelease事件绑定
+
+    def on_keep_alive(self):
+        """处理保持会话按钮状态变化"""
+        if self.keep_alive_button.instate(['selected']):
+            self.keep_alive_active = True
+            self.keep_alive_button.configure(text="3E00: ON")
+            self.start_keep_alive()
+        else:
+            self.stop_keep_alive()
+            self.keep_alive_button.configure(text="3E00: OFF")
+
+    def start_keep_alive(self):
+        """启动保持会话线程"""
+        self.keep_alive_thread = threading.Thread(target=self.send_keep_alive, daemon=True)
+        self.keep_alive_thread.start()
+
+    def stop_keep_alive(self):
+        """停止保持会话"""
+        self.keep_alive_active = False
+        if self.keep_alive_thread and self.keep_alive_thread.is_alive():
+            self.keep_alive_thread.join(timeout=1.0)
+
+    def send_keep_alive(self):
+        """定时发送3E00"""
+        while self.keep_alive_active and self.tp_stack:
+            try:
+                data = bytes.fromhex("3E00")
+                self.tp_stack.send(data)
+                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                self.msg_display.insert(tk.END, f"[{timestamp}] Keep Alive: 3E 00\n")
+                self.msg_display.see(tk.END)
+            except Exception as e:
+                self.msg_display.insert(tk.END, f"Keep Alive Error: {str(e)}\n")
+                self.msg_display.see(tk.END)
+            time.sleep(3)
