@@ -19,6 +19,7 @@ import time
 class BootloaderPack:
     def __init__(self, parent):
         self.parent = parent
+        self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
         self.create_widgets()
 
         
@@ -63,17 +64,37 @@ class BootloaderPack:
         folder_selected = filedialog.askdirectory()
         if folder_selected:
             self.folder_path.set(folder_selected)
-            # 添加文件检查逻辑
             required_files = {'gen6nu.hex', 'gen6nu_sbl.hex', 'gen6nu_sbl_sign.bin', 'gen6nu_sign.bin'}
             existing_files = set(os.listdir(folder_selected))
             missing_files = required_files - existing_files
             
-            # 更新状态标签
-            if not missing_files:
-                self.status_label.config(text="File Check PASS", foreground="green")
-            else:
-                self.status_label.config(
-                    text=f"File Check FAILED\nMissing: {', '.join(missing_files)}",
-                    foreground="red"
-                )
-        
+            try:
+                # 增加空值检查
+                if self.trace_handler is None:
+                    self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
+                
+                if self.trace_handler:
+                    self.trace_handler(f"Selected firmware folder: {folder_selected}")
+                    
+                    # 更新状态标签
+                    if not missing_files:
+                        self.status_label.config(text="File Check PASS", foreground="green")
+                        self.trace_handler("File check PASS - All required files found")
+                    else:
+                        self.status_label.config(
+                            text=f"File Check FAILED\nMissing: {', '.join(missing_files)}",
+                            foreground="red"
+                        )
+                        self.trace_handler(f"File check FAILED - Missing files: {', '.join(missing_files)}")
+                else:
+                    print("Warning: Trace handler not available")
+            except Exception as e:
+                print(f"Error in trace handling: {str(e)}")
+                # 确保状态标签仍然更新
+                if not missing_files:
+                    self.status_label.config(text="File Check PASS", foreground="green")
+                else:
+                    self.status_label.config(
+                        text=f"File Check FAILED\nMissing: {', '.join(missing_files)}",
+                        foreground="red"
+                    )

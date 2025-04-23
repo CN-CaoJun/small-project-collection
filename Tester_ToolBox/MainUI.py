@@ -21,7 +21,7 @@ class MainWindow(tk.Tk):
         super().__init__()
         
         self.title("Diagnostic ToolBox")
-        self.geometry("746x600")
+        self.geometry("750x800")
         
         # 创建主框架
         self.main_frame = ttk.Frame(self)
@@ -43,7 +43,18 @@ class MainWindow(tk.Tk):
         self.init_connection_pack()
         self.init_diagnostic_pack()
         self.init_bootloader_pack()
-    
+        
+        # 添加Trace Pack框架
+        self.trace_frame = ttk.LabelFrame(self.main_frame, text="Trace Messages")
+        self.trace_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # 初始化Trace Pack
+        self.init_trace_pack()
+        
+    def get_trace_handler(self):
+        """获取消息处理器"""
+        return self.trace.append_message if hasattr(self, 'trace') else None
+
     def init_connection_pack(self):
         from ConnectionPack import ConnectionPack
         self.connection = ConnectionPack(self.connection_frame)
@@ -63,6 +74,13 @@ class MainWindow(tk.Tk):
         """初始化Bootloader模块"""
         from BootloaderPack import BootloaderPack
         self.bootloader = BootloaderPack(self.bootloader_frame)
+        # 传递trace handler
+        self.bootloader.trace_handler = self.get_trace_handler()
+
+    def init_trace_pack(self):
+        """初始化消息追踪模块"""
+        from TracePack import TracePack
+        self.trace = TracePack(self.trace_frame)
 
 if __name__ == "__main__":
     app = MainWindow()
