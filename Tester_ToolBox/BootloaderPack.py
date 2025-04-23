@@ -20,6 +20,7 @@ class BootloaderPack:
     def __init__(self, parent):
         self.parent = parent
         self.create_widgets()
+
         
     def create_widgets(self):
         # 主框架容器
@@ -33,7 +34,7 @@ class BootloaderPack:
         # 文件夹选择按钮
         self.select_btn = ttk.Button(
             self.folder_selector_frame,
-            text="选择固件目录",
+            text="Select BIN folder",
             command=self.select_firmware_folder
         )
         self.select_btn.pack(side=tk.LEFT, padx=(0, 5))
