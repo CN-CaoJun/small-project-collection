@@ -2,3 +2,4 @@
 build/
 block_device.img
 can_tester_gui/reference_modules
+Tester_ToolBox/reference_modules

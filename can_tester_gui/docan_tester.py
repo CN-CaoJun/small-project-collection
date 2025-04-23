@@ -383,11 +383,11 @@ class DoCANTester(tk.Tk):
             self.canfd_check.configure(state='disabled')
             
             # 启用ISOTP Enable按钮
-            self.isotp_enable_button.configure(state='normal')
             
             print(f"CAN channel initialized successfully: {selected_channel} (ID: {channel_config.hw_channel})")
-        
-            # 启用ISOTP发送按钮
+
+            
+            self.isotp_enable_button.configure(state='normal')
             self.send_button.configure(state='normal')
             
         except Exception as e:
@@ -552,8 +552,8 @@ class DoCANTester(tk.Tk):
         # 停止ISOTP层
         if self.isotp_layer:
             self.stop_isotp()
-            self.isotp_enable_button.state(['!selected'])
         
+            self.isotp_enable_button.state(['!selected'])
         # 禁用ISOTP Enable按钮
         self.isotp_enable_button.configure(state='disabled')
         
