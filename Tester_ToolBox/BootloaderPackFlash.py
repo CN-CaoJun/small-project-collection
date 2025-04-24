@@ -136,11 +136,21 @@ class FlashingProcess:
                     self.log("获取种子失败")
                     return False
                     
-                seed = response.data[2:6]  # 提取种子数据
-                self.log(f"获取种子成功: {seed.hex().upper()}")
+                self.log(f"完整响应数据: {response.data.hex().upper()}")
+                print(f"seed response: {response.data.hex().upper()}")
                 
-                # 发送密钥 (步骤5)
-                key = bytes.fromhex('9D EF 8A 4D')  # 固定密钥
+                seed = response.data[1:5]  # 正确提取4字节
+                self.log(f"获取种子成功（长度{len(seed)}）: {seed.hex().upper()}")
+                
+
+                from algo_27 import SecurityKeyAlgorithm
+                seed_int = int.from_bytes(seed, byteorder='big')  # 将bytes类型种子转换为整数
+                computed_key = SecurityKeyAlgorithm.compute_level4(
+                    seed=seed_int, 
+                    keyk=SecurityKeyAlgorithm.SECURITY_KKEY_L4
+                )
+                key = computed_key.to_bytes(4, byteorder='big')
+                print(f"Key: 0x{computed_key:08X}")  # 打印密钥值
                 response = client.send_key(level=0x08, key=key)
                 
                 if response:

@@ -292,35 +292,44 @@ class BootloaderPack:
 
     def start_flashing(self):
         """开始刷写流程"""
+        def flash_thread():
+            try:
+                # 立即禁用按钮（主线程操作）
+                self.start_flash_btn.config(state=tk.DISABLED)
+                flashing = FlashingProcess(self.uds_client, self.trace_handler)
+                success = flashing.execute_flashing_sequence(self.folder_path.get())
+                self.update_flash_status(success)
+            except Exception as e:
+                self.show_flash_error(str(e))
+            finally:  
+                # 恢复按钮状态（主线程操作）
+                self.start_flash_btn.config(state=tk.NORMAL)
+
+        # 直接启动线程
+        threading.Thread(target=flash_thread, daemon=True).start()
+
+    def update_flash_status(self, success):
+        """更新刷写状态"""
         try:
-            if not self.uds_client:
-                if self.ensure_trace_handler():
-                    self.trace_handler("错误：UDS客户端未连接")
-                return False
-                
-            if not self.folder_path.get():
-                if self.ensure_trace_handler():
-                    self.trace_handler("错误：未选择固件文件夹")
-                return False
-                
-            # 创建刷写流程实例并立即执行
-            flashing = FlashingProcess(self.uds_client, self.trace_handler)
-            success = flashing.execute_flashing_sequence(self.folder_path.get())
-            
             if success:
+                self.status_label.config(text="刷写完成", foreground="green")
                 if self.ensure_trace_handler():
                     self.trace_handler("刷写流程完成")
             else:
-                if self.ensure_trace_handler():
-                    self.trace_handler("刷写流程失败")
-            
-            return success
-            
+                self.status_label.config(text="刷写失败", foreground="red")
         except Exception as e:
             if self.ensure_trace_handler():
-                self.trace_handler(f"刷写过程发生错误: {str(e)}")
-            return False
+                self.trace_handler(f"状态更新异常: {str(e)}")
 
+    def show_flash_error(self, error):
+        """显示错误信息"""
+        try:
+            self.status_label.config(text=f"错误: {error}", foreground="red")
+            if self.ensure_trace_handler():
+                self.trace_handler(f"刷写错误: {error}")
+        except Exception as e:
+            if self.ensure_trace_handler():
+                self.trace_handler(f"错误处理异常: {str(e)}")
 
     def get_version(self):
         """获取ECU版本号"""
