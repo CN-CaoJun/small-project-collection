@@ -42,7 +42,7 @@ class ConnectionPack:
         self.hardware_combo = ttk.Combobox(self.hw_control_frame, values=[" "], width=24)
         self.hardware_combo.pack(side=tk.LEFT, padx=(0, 2))
         self.scan_button = ttk.Button(self.hw_control_frame, text="Scan", width=8, 
-                                    command=self.scan_vector_channels)
+                                    command=self.scan_can_device)
         self.scan_button.pack(side=tk.LEFT)
         
         # Baudrate部分
@@ -91,51 +91,68 @@ class ConnectionPack:
         )
         self.init_button.pack(side=tk.LEFT, padx=2)
     
-    def scan_vector_channels(self):
+    def scan_can_device(self):
         try:
-            # Check if XL driver is available
-            if canlib.xldriver is None:
-                self.show_error("Vector XL API is not available") 
-                return
-            
-            # Open XL driver
-            canlib.xldriver.xlOpenDriver()
-            
-            # Get channel configurations
-            channel_configs = canlib.get_channel_configs()
-            
-            if not channel_configs:
-                self.show_error("No Vector channels found") 
-                return
-            
-            # Prepare channel list
+            self.channel_configs.clear()
             channel_list = []
-            # Clear old configuration information
-            self.channel_configs.clear()  
-            
-            # Display channel information
-            for config in channel_configs:
-                channel_name = f"{config.name}"
-                channel_list.append(channel_name)
-                # Store configuration information
-                self.channel_configs[channel_name] = config
-                print(f"Detected Channel - HW: {config.hw_channel}, Type: {config.hw_type.name if hasattr(config.hw_type, 'name') else config.hw_type}, Bus: {config.connected_bus_type.name if hasattr(config.connected_bus_type, 'name') else 'N/A'}, Index: {config.hw_index}") 
-            
-            # Update dropdown list
-            self.hardware_combo['values'] = channel_list
-            
-            # Select the first channel if available
-            if channel_list:
-                self.hardware_combo.current(0)
-                
-        except Exception as e:
-            self.show_error(f"Error scanning channels: {str(e)}") 
-        finally:
+
+            # Scan Vector devices
+            if canlib.xldriver is not None:
+                try:
+                    canlib.xldriver.xlOpenDriver()
+                    vector_configs = canlib.get_channel_configs()
+                    for config in vector_configs:
+                        channel_name = f"Vector: {config.name}"
+                        channel_list.append(channel_name)
+                        # Store device type and configuration
+                        self.channel_configs[channel_name] = {
+                            'type': 'vector',
+                            'config': config,
+                            'hw_channel': config.hw_channel
+                        }
+                except Exception as e:
+                    print(f"Vector scan error: {str(e)}")
+                finally:
+                    canlib.xldriver.xlCloseDriver()
+
+            # Scan PCAN devices
             try:
-                # Close XL driver
-                canlib.xldriver.xlCloseDriver()
-            except:
-                pass
+                from can.interfaces.pcan.basic import (
+                    PCANBasic, PCAN_ERROR_OK, PCAN_NONEBUS,
+                    LOOKUP_DEVICE_TYPE, LOOKUP_DEVICE_ID,
+                    LOOKUP_CONTROLLER_NUMBER, LOOKUP_IP_ADDRESS,
+                    PCAN_CHANNEL_FEATURES, FEATURE_FD_CAPABLE
+                )
+                param_str = b'devicetype=PCAN_USB'
+                pcan = PCANBasic()
+                result = pcan.LookUpChannel(param_str)
+                
+                if result[0] == PCAN_ERROR_OK:
+                    handle = result[1]
+                    if handle != PCAN_NONEBUS:
+                        feature_result = pcan.GetValue(handle, PCAN_CHANNEL_FEATURES)
+                        if feature_result[0] == PCAN_ERROR_OK:
+                            fd_support = (feature_result[1] & FEATURE_FD_CAPABLE) == FEATURE_FD_CAPABLE
+                            channel_name = f"PCAN: 0x{handle.value:02X} (FD support: {fd_support})"  # 添加.value获取实际值
+                            channel_list.append(channel_name)
+                            self.channel_configs[channel_name] = {
+                                'type': 'pcan',
+                                'handle': handle.value,  # 确保存储十六进制值
+                                'features': fd_support
+                            }
+            except Exception as e:
+                print(f"PCAN scan error: {str(e)}")
+
+            # Update UI
+            if channel_list:
+                self.hardware_combo['values'] = channel_list
+                self.hardware_combo.current(0)
+            else:
+                self.show_error("No CAN devices found")
+
+        except Exception as e:
+            self.show_error(f"Device scan failed: {str(e)}")
+
     def show_error(self, message):
         # Create error message window
         error_window = tk.Toplevel(self.parent)  # Use self.parent instead of self
@@ -189,23 +206,40 @@ class ConnectionPack:
             if not params:
                 return
             
-            print(f"Selected channel: {selected_channel}")
-            print(f"Channel ID: {channel_config.hw_channel}")
-            
             if self.can_bus:
                 self.can_bus.shutdown()
-                
-            self.can_bus = canlib.VectorBus(
-                channel=channel_config.hw_channel,
-                **params
-            )
+            
+            print(f"channel_config['type']: {channel_config['type']}")
+            
+            if channel_config['type'] == 'pcan':
+                from can.interfaces.pcan import PcanBus
+                # 添加PCAN通道映射
+                pcan_channel_map = {
+                    0x51: "PCAN_USBBUS1",
+                    0x52: "PCAN_USBBUS2",
+                    0x53: "PCAN_USBBUS3",
+                    0x54: "PCAN_USBBUS4"
+                }
+                handle = channel_config['handle']
+                if handle not in pcan_channel_map:
+                    raise ValueError(f"Unsupported PCAN channel handle: 0x{handle:02X}")
+                self.can_bus = PcanBus(
+                    channel=pcan_channel_map[handle],
+                    bitrate=500000,
+                    fd=False,
+                )
+            elif channel_config['type'] == 'vector':
+                self.can_bus = canlib.VectorBus(
+                    channel=channel_config['hw_channel'],  
+                    **params
+                )
             # Disable all controls in connection frame
             self.hardware_combo.configure(state='disabled')
             self.scan_button.configure(state='disabled')
             self.baudrate_entry.configure(state='disabled')
             self.canfd_check.configure(state='disabled')
             
-            print(f"CAN channel initialized successfully: {selected_channel} (ID: {channel_config.hw_channel})")
+            print(f"CAN channel initialized successfully: {selected_channel} (ID: {channel_config['hw_channel'] if channel_config['type'] == 'vector' else channel_config['handle']:02X})")  # 修改这里的属性访问方式
             
         except Exception as e:
             self.show_error(f"Failed to initialize CAN channel: {str(e)}")
