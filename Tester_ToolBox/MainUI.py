@@ -36,7 +36,7 @@ class MainWindow(tk.Tk):
         self.diagnostic_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Bootloader Pack - 刷写模块
-        self.bootloader_frame = ttk.LabelFrame(self.main_frame, text="Bootloader")
+        self.bootloader_frame = ttk.LabelFrame(self.main_frame, text="IMS Bootloader")
         self.bootloader_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # 初始化各个功能模块
