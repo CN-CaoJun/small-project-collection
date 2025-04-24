@@ -201,6 +201,15 @@ class BootloaderPack:
         )
         self.get_version_btn.pack(side=tk.LEFT, padx=(10, 5))
         
+        # 添加版本信息显示标签
+        self.version_label = ttk.Label(
+            self.uds_control_frame,
+            text="Version: N/A",
+            font=('Arial', 9),
+            foreground="gray"
+        )
+        self.version_label.pack(side=tk.LEFT, padx=(10, 0))
+
     def ensure_trace_handler(self):
         """确保trace_handler可用"""
         if self.trace_handler is None:
@@ -319,26 +328,67 @@ class BootloaderPack:
             if not self.uds_client:
                 if self.ensure_trace_handler():
                     self.trace_handler("错误：UDS客户端未连接")
-                return
+                return False
                 
             with self.uds_client as client:
-                # 发送DID 0x7705读取请求
-                response = client.read_data_by_identifier(0x7705)
+                # 发送原始22 F0 F0请求
+                request = bytes.fromhex('22 77 05')
+                client.conn.send(request)
+                response = client.conn.wait_frame(timeout=3)
                 
-                if response and response.data:
-                    # 提取前10字节并转换为ASCII
-                    version_bytes = response.data[:10]
+                if response and response.hex().upper().startswith('627705'):
+                    # 解析完整数据结构：62 77 05 [10字节版本] [12字节日期] [8字节时间]
+                    version_data = response[3:13]   # 10字节版本信息
+                    date_data = response[13:25]     # 12字节日期数据
+                    time_data = response[25:33]     # 8字节时间数据
                     
-                    log_msg = f"ECU版本号: {version_bytes}"
+                    # 转换版本信息
+                    version_str = version_data.decode('ascii', errors='ignore').strip()
+                    
+                    # 转换日期信息（假设为ASCII格式）
+                    try:
+                        date_str = date_data.decode('ascii', errors='ignore').strip()
+                    except:
+                        date_str = "日期解析失败"
+                        
+                    # 转换时间信息（假设为ASCII格式）
+                    try:
+                        time_str = time_data.decode('ascii', errors='ignore').strip()
+                    except:
+                        time_str = "时间解析失败"
+                    
+                    # 更新版本信息标签
+                    self.version_label.config(
+                        text=f"Ver: {version_str}",
+                        foreground="green"
+                    )
+                    
+                    # 记录到tracehandler
                     if self.ensure_trace_handler():
+                        log_msg = (
+                            f"完整版本信息:\n"
+                            f"  版本号: {version_str}\n"
+                            f"  日期: {date_str} (原始数据: {date_data.hex().upper()})\n"
+                            f"  时间: {time_str} (原始数据: {time_data.hex().upper()})"
+                        )
                         self.trace_handler(log_msg)
                     return True
                 else:
+                    err_msg = f"获取版本号失败，响应: {response.hex().upper() if response else '无响应'}"
+                    self.status_label.config(
+                        text=err_msg,
+                        foreground="red"
+                    )
                     if self.ensure_trace_handler():
-                        self.trace_handler("获取版本号失败")
+                        self.trace_handler(err_msg)
                     return False
                     
         except Exception as e:
+            err_msg = f"获取版本号异常: {str(e)}"
+            self.status_label.config(
+                text=err_msg,
+                foreground="red"
+            )
             if self.ensure_trace_handler():
-                self.trace_handler(f"获取版本号时发生错误: {str(e)}")
+                self.trace_handler(err_msg)
             return False
