@@ -59,12 +59,6 @@ class MainWindow(tk.Tk):
         from ConnectionPack import ConnectionPack
         self.connection = ConnectionPack(self.connection_frame)
         
-        # 获取CAN总线对象的方法
-        def get_bus(self):
-            if self.connection:
-                return self.connection.get_can_bus()
-            return None
-    
     def init_diagnostic_pack(self):
         """初始化诊断模块"""
         from DiagnosticPack import DiagnosticPack
