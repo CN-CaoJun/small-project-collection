@@ -31,16 +31,16 @@ class BootloaderPack:
     
     def init_uds_client(self):
         try:
-            # 获取主窗口的CAN总线对象
+            # Get CAN bus object from main window
             main_window = self.parent.winfo_toplevel()
             can_bus = main_window.connection.get_can_bus()
             
             if not can_bus:
                 if self.ensure_trace_handler():
-                    self.trace_handler("错误：CAN总线未初始化")
+                    self.trace_handler("Error: CAN bus not initialized")
                 return False
                 
-            # 配置ISO-TP参数
+            # Configure ISO-TP parameters
             isotp_params = {
                 'stmin': 10,
                 'blocksize': 8,
@@ -48,8 +48,8 @@ class BootloaderPack:
                 'tx_data_length': 8,
                 'tx_data_min_length': None,
                 'tx_padding': 0,
-                'rx_flowcontrol_timeout': 2000,    # 增加到2000毫秒
-                'rx_consecutive_frame_timeout': 2000,  # 增加到2000毫秒
+                'rx_flowcontrol_timeout': 2000,    # Increased to 2000ms
+                'rx_consecutive_frame_timeout': 2000,  # Increased to 2000ms
                 'override_receiver_stmin': None,
                 'max_frame_size': 4095,
                 'can_fd': False,
@@ -58,17 +58,17 @@ class BootloaderPack:
                 'listen_mode': False
             }
             
-            # 创建notifier
+            # Create notifier
             self.notifier = can.Notifier(can_bus, [])
             
-            # 配置ISO-TP地址
+            # Configure ISO-TP address
             tp_addr = isotp.Address(
                 isotp.AddressingMode.Normal_11bits,
-                txid=0x749,  # 发送ID
-                rxid=0x759   # 接收ID
+                txid=0x749,  # Transmit ID
+                rxid=0x759   # Receive ID
             )
             
-            # 创建ISO-TP栈
+            # Create ISO-TP stack
             self.stack = isotp.NotifierBasedCanStack(
                 bus=can_bus,
                 notifier=self.notifier,
@@ -76,52 +76,284 @@ class BootloaderPack:
                 params=isotp_params
             )
             
-            # 创建UDS连接
+            # Create UDS connection
             conn = PythonIsoTpConnection(self.stack)
             
-            # 配置UDS客户端
+            # Configure UDS client
             uds_config = udsoncan.configs.default_client_config.copy()
             uds_config['data_identifiers'] = {
                 'default' : '>H',                     
             }
-            # 修改超时配置
-            uds_config['p2_timeout'] = 2  # 增加到2秒
+            # Modify timeout configuration
+            uds_config['p2_timeout'] = 2  # Increased to 2 seconds
             uds_config['p2_star_timeout'] = 5  
-            uds_config['request_timeout'] = 4  # 增加总体超时时间
+            uds_config['request_timeout'] = 4  # Increased total timeout
             uds_config['session_timing'] = {
-                'p2_server_max': 2,  # 服务器最大响应时间
-                'p2_star_server_max': 5  # 服务器最大扩展响应时间
+                'p2_server_max': 2,  # Server maximum response time
+                'p2_star_server_max': 5  # Server maximum extended response time
             }
             
-            # 打印UDS配置信息
+            # Print UDS configuration information
             if self.ensure_trace_handler():
-                self.trace_handler("UDS配置信息:")
+                self.trace_handler("UDS Configuration Information:")
                 for key, value in uds_config.items():
                     self.trace_handler(f"  {key}: {value}")
             
             self.uds_client = Client(conn, config=uds_config)
             
             if self.ensure_trace_handler():
-                self.trace_handler("UDS客户端初始化成功")
+                self.trace_handler("UDS client initialization successful")
             return True
             
         except Exception as e:
             if self.ensure_trace_handler():
-                self.trace_handler(f"UDS客户端初始化失败: {str(e)}")
+                self.trace_handler(f"UDS client initialization failed: {str(e)}")
             return False
             
     def close_uds_connection(self):
-        """关闭UDS连接"""
+        """Close UDS connection"""
         try:
             if self.uds_client:
                 self.notifier.stop()
                 self.uds_client = None
                 if self.ensure_trace_handler():
-                    self.trace_handler("UDS连接已关闭")
+                    self.trace_handler("UDS connection closed")
         except Exception as e:
             if self.ensure_trace_handler():
-                self.trace_handler(f"关闭UDS连接失败: {str(e)}")
+                self.trace_handler(f"Failed to close UDS connection: {str(e)}")
+
+    def ensure_trace_handler(self):
+        """Ensure trace_handler is available"""
+        if self.trace_handler is None:
+            self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
+        return self.trace_handler is not None
+
+    def select_firmware_folder(self):
+        """Handle folder selection"""
+        from tkinter import filedialog
+        folder_selected = filedialog.askdirectory()
+        if folder_selected:
+            self.folder_path.set(folder_selected)
+            required_files = {'gen6nu.hex', 'gen6nu_sbl.hex', 'gen6nu_sbl_sign.bin', 'gen6nu_sign.bin'}
+            existing_files = set(os.listdir(folder_selected))
+            missing_files = required_files - existing_files
             
+            try:
+                if self.ensure_trace_handler():
+                    self.trace_handler(f"Selected firmware folder: {folder_selected}")
+                    
+                    # Update status label and Start Flashing button state
+                    if not missing_files:
+                        self.status_label.config(text="File Check PASS", foreground="green")
+                        self.trace_handler("File check PASS - All required files found")
+                        self.start_flash_btn.config(state=tk.NORMAL)  # 启用按钮
+                    else:
+                        self.status_label.config(
+                            text=f"File Check FAILED\nMissing: {', '.join(missing_files)}",
+                            foreground="red"
+                        )
+                        self.trace_handler(f"File check FAILED - Missing files: {', '.join(missing_files)}")
+                        self.start_flash_btn.config(state=tk.DISABLED)  # 禁用按钮
+                else:
+                    print("Warning: Trace handler not available")
+            except Exception as e:
+                print(f"Error in trace handling: {str(e)}")
+                # Ensure status label and button state are still updated
+                if not missing_files:
+                    self.status_label.config(text="File Check PASS", foreground="green")
+                    self.start_flash_btn.config(state=tk.NORMAL)  # 启用按钮
+                else:
+                    self.status_label.config(
+                        text=f"File Check FAILED\nMissing: {', '.join(missing_files)}",
+                        foreground="red"
+                    )
+                    self.start_flash_btn.config(state=tk.DISABLED)  # 禁用按钮
+
+    def toggle_uds_client(self):
+        """Toggle UDS client connection status"""
+        if self.uds_client is None:
+            # Try to initialize UDS client
+            if self.init_uds_client():
+                self.init_uds_btn.config(text="Close UDS Client")
+                self.uds_status_label.config(text="UDS Client: Connected", foreground="green")
+                # start test present
+                self.start_tester_present_thread()
+            else:
+                self.uds_status_label.config(text="UDS Client: Connection Failed", foreground="red")
+        else:
+            # stop test present
+            self.stop_tester_present_thread()
+            # Close UDS client
+            self.close_uds_connection()
+            self.init_uds_btn.config(text="Init UDS Client")
+            self.uds_status_label.config(text="UDS Client: Not Connected", foreground="black")
+
+    def start_tester_present_thread(self):
+        self.tester_present_running = True
+        self.tester_present_thread = threading.Thread(target=self._tester_present_loop, daemon=True)
+        self.tester_present_thread.start()
+
+    def stop_tester_present_thread(self):
+        self.tester_present_running = False
+        if hasattr(self, 'tester_present_thread'):
+            self.tester_present_thread = None
+
+    def _tester_present_loop(self):
+        while self.tester_present_running and self.uds_client:
+            try:
+                if not hasattr(self, 'is_flashing') or not self.is_flashing:
+                    with self.uds_client as client:
+                        client.conn.send(bytes.fromhex('3E 00'))
+                        response = client.conn.wait_frame(timeout=0.5)
+                        if response:
+                            if self.ensure_trace_handler():
+                                self.trace_handler(f"TesterPresent response: {response.hex().upper()}")
+                        if response and response.hex().upper() != '7E00':
+                            if self.ensure_trace_handler():
+                                self.trace_handler(f"Unexpected TesterPresent response: {response.hex().upper()}")
+            except Exception as e:
+                if self.ensure_trace_handler():
+                    self.trace_handler(f"TesterPresent error: {str(e)}")
+            time.sleep(2)
+    
+    def perform_ecu_reset(self):
+        """Execute ECU reset"""
+        try:
+            if not self.uds_client:
+                if self.ensure_trace_handler():
+                    self.trace_handler("Error: UDS client not connected")
+                return False
+                
+            with self.uds_client as client:
+                # Send hardware reset command (reset_type=1 indicates hardware reset)
+                response = client.ecu_reset(reset_type=1)
+                
+                if response and self.trace_handler:
+                    # Print complete response content
+                    self.trace_handler(f"ECU reset command sent, response content: {response.data.hex().upper()}")
+                return True if response else False
+                
+        except Exception as e:
+            if self.ensure_trace_handler():
+                self.trace_handler(f"ECU reset failed: {str(e)}")
+            return False
+
+    def start_flashing(self):
+        """Start flashing process"""
+        def flash_thread():
+            try:
+                # 设置刷写标志，暂停TesterPresent发送
+                self.is_flashing = True
+                # Immediately disable button (main thread operation)
+                self.start_flash_btn.config(state=tk.DISABLED)
+                flashing = FlashingProcess(self.uds_client, self.trace_handler)
+                success = flashing.execute_flashing_sequence(self.folder_path.get())
+                self.update_flash_status(success)
+            except Exception as e:
+                self.show_flash_error(str(e))
+            finally:  
+                # 清除刷写标志，恢复TesterPresent发送
+                self.is_flashing = False
+                # Restore button state (main thread operation)
+                self.start_flash_btn.config(state=tk.NORMAL)
+
+        # Start thread directly
+        threading.Thread(target=flash_thread, daemon=True).start()
+
+    def update_flash_status(self, success):
+        """Update flashing status"""
+        try:
+            if success:
+                self.status_label.config(text="Flashing Complete", foreground="green")
+                if self.ensure_trace_handler():
+                    self.trace_handler("Flashing process completed")
+            else:
+                self.status_label.config(text="Flashing Failed", foreground="red")
+        except Exception as e:
+            if self.ensure_trace_handler():
+                self.trace_handler(f"Status update exception: {str(e)}")
+
+    def show_flash_error(self, error):
+        """Display error message"""
+        try:
+            self.status_label.config(text=f"Error: {error}", foreground="red")
+            if self.ensure_trace_handler():
+                self.trace_handler(f"Flashing error: {error}")
+        except Exception as e:
+            if self.ensure_trace_handler():
+                self.trace_handler(f"Error handling exception: {str(e)}")
+
+    def get_version(self):
+        """Get ECU version number"""
+        try:
+            if not self.uds_client:
+                if self.ensure_trace_handler():
+                    self.trace_handler("Error: UDS client not connected")
+                return False
+                
+            with self.uds_client as client:
+                # Send raw 22 77 05 request
+                request = bytes.fromhex('22 77 05')
+                client.conn.send(request)
+                response = client.conn.wait_frame(timeout=3)
+                
+                if response and response.hex().upper().startswith('627705'):
+                    # Parse complete data structure: 62 77 05 [10 bytes version] [12 bytes date] [8 bytes time]
+                    version_data = response[3:13]   # 10 bytes version info
+                    date_data = response[13:25]     # 12 bytes date data
+                    time_data = response[25:33]     # 8 bytes time data
+                    
+                    # Convert version information
+                    version_str = version_data.decode('ascii', errors='ignore').strip()
+                    
+                    # Convert date information (assuming ASCII format)
+                    try:
+                        date_str = date_data.decode('ascii', errors='ignore').strip()
+                    except:
+                        date_str = "Date parsing failed"
+                        
+                    # Convert time information (assuming ASCII format)
+                    try:
+                        time_str = time_data.decode('ascii', errors='ignore').strip()
+                    except:
+                        time_str = "Time parsing failed"
+                    
+                    # Update version information label
+                    self.version_label.config(
+                        text=f"Ver: {version_str}",
+                        foreground="green"
+                    )
+                    
+                    # Log to tracehandler
+                    if self.ensure_trace_handler():
+                        log_msg = (
+                            f"Complete version information:\n"
+                            f"  Version: {version_str}\n"
+                            f"  Date: {date_str} \n"
+                            f"  Time: {time_str} "
+                        )
+                        self.trace_handler(log_msg)
+                    return True
+                else:
+                    err_msg = f"Failed to get version, response: {response.hex().upper() if response else 'No response'}"
+                    self.status_label.config(
+                        text=err_msg,
+                        foreground="red"
+                    )
+                    if self.ensure_trace_handler():
+                        self.trace_handler(err_msg)
+                    return False
+                    
+        except Exception as e:
+            err_msg = f"Version retrieval exception: {str(e)}"
+            self.status_label.config(
+                text=err_msg,
+                foreground="red"
+            )
+            if self.ensure_trace_handler():
+                self.trace_handler(err_msg)
+            return False
+
     def create_widgets(self):
         # 主框架容器
         self.bootloader_frame = ttk.LabelFrame(self.parent, text="Operation")
@@ -189,7 +421,8 @@ class BootloaderPack:
         self.start_flash_btn = ttk.Button(
             self.uds_control_frame,
             text="Start Flashing",
-            command=self.start_flashing
+            command=self.start_flashing,
+            state=tk.DISABLED  # 初始状态设置为禁用
         )
         self.start_flash_btn.pack(side=tk.LEFT, padx=(10, 5))
         
@@ -209,195 +442,3 @@ class BootloaderPack:
             foreground="gray"
         )
         self.version_label.pack(side=tk.LEFT, padx=(10, 0))
-
-    def ensure_trace_handler(self):
-        """确保trace_handler可用"""
-        if self.trace_handler is None:
-            self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
-        return self.trace_handler is not None
-
-    def select_firmware_folder(self):
-        """处理文件夹选择"""
-        from tkinter import filedialog
-        folder_selected = filedialog.askdirectory()
-        if folder_selected:
-            self.folder_path.set(folder_selected)
-            required_files = {'gen6nu.hex', 'gen6nu_sbl.hex', 'gen6nu_sbl_sign.bin', 'gen6nu_sign.bin'}
-            existing_files = set(os.listdir(folder_selected))
-            missing_files = required_files - existing_files
-            
-            try:
-                if self.ensure_trace_handler():
-                    self.trace_handler(f"Selected firmware folder: {folder_selected}")
-                    
-                    # 更新状态标签
-                    if not missing_files:
-                        self.status_label.config(text="File Check PASS", foreground="green")
-                        self.trace_handler("File check PASS - All required files found")
-                    else:
-                        self.status_label.config(
-                            text=f"File Check FAILED\nMissing: {', '.join(missing_files)}",
-                            foreground="red"
-                        )
-                        self.trace_handler(f"File check FAILED - Missing files: {', '.join(missing_files)}")
-                else:
-                    print("Warning: Trace handler not available")
-            except Exception as e:
-                print(f"Error in trace handling: {str(e)}")
-                # 确保状态标签仍然更新
-                if not missing_files:
-                    self.status_label.config(text="File Check PASS", foreground="green")
-                else:
-                    self.status_label.config(
-                        text=f"File Check FAILED\nMissing: {', '.join(missing_files)}",
-                        foreground="red"
-                    )
-
-    def toggle_uds_client(self):
-        """切换UDS客户端连接状态"""
-        if self.uds_client is None:
-            # 尝试初始化UDS客户端
-            if self.init_uds_client():
-                self.init_uds_btn.config(text="Close UDS Client")
-                self.uds_status_label.config(text="UDS Client: Connected", foreground="green")
-            else:
-                self.uds_status_label.config(text="UDS Client: Connection Failed", foreground="red")
-        else:
-            # 关闭UDS客户端
-            self.close_uds_connection()
-            self.init_uds_btn.config(text="Init UDS Client")
-            self.uds_status_label.config(text="UDS Client: Not Connected", foreground="black")
-
-    def perform_ecu_reset(self):
-        """执行ECU复位"""
-        try:
-            if not self.uds_client:
-                if self.ensure_trace_handler():
-                    self.trace_handler("错误：UDS客户端未连接")
-                return False
-                
-            with self.uds_client as client:
-                # 发送硬件复位命令 (reset_type=1 表示硬件复位)
-                response = client.ecu_reset(reset_type=1)
-                
-                if response and self.trace_handler:
-                    # 打印完整的响应内容
-                    self.trace_handler(f"ECU复位命令已发送，响应内容: {response.data.hex().upper()}")
-                return True if response else False
-                
-        except Exception as e:
-            if self.ensure_trace_handler():
-                self.trace_handler(f"ECU复位失败: {str(e)}")
-            return False
-
-    def start_flashing(self):
-        """开始刷写流程"""
-        def flash_thread():
-            try:
-                # 立即禁用按钮（主线程操作）
-                self.start_flash_btn.config(state=tk.DISABLED)
-                flashing = FlashingProcess(self.uds_client, self.trace_handler)
-                success = flashing.execute_flashing_sequence(self.folder_path.get())
-                self.update_flash_status(success)
-            except Exception as e:
-                self.show_flash_error(str(e))
-            finally:  
-                # 恢复按钮状态（主线程操作）
-                self.start_flash_btn.config(state=tk.NORMAL)
-
-        # 直接启动线程
-        threading.Thread(target=flash_thread, daemon=True).start()
-
-    def update_flash_status(self, success):
-        """更新刷写状态"""
-        try:
-            if success:
-                self.status_label.config(text="刷写完成", foreground="green")
-                if self.ensure_trace_handler():
-                    self.trace_handler("刷写流程完成")
-            else:
-                self.status_label.config(text="刷写失败", foreground="red")
-        except Exception as e:
-            if self.ensure_trace_handler():
-                self.trace_handler(f"状态更新异常: {str(e)}")
-
-    def show_flash_error(self, error):
-        """显示错误信息"""
-        try:
-            self.status_label.config(text=f"错误: {error}", foreground="red")
-            if self.ensure_trace_handler():
-                self.trace_handler(f"刷写错误: {error}")
-        except Exception as e:
-            if self.ensure_trace_handler():
-                self.trace_handler(f"错误处理异常: {str(e)}")
-
-    def get_version(self):
-        """获取ECU版本号"""
-        try:
-            if not self.uds_client:
-                if self.ensure_trace_handler():
-                    self.trace_handler("错误：UDS客户端未连接")
-                return False
-                
-            with self.uds_client as client:
-                # 发送原始22 F0 F0请求
-                request = bytes.fromhex('22 77 05')
-                client.conn.send(request)
-                response = client.conn.wait_frame(timeout=3)
-                
-                if response and response.hex().upper().startswith('627705'):
-                    # 解析完整数据结构：62 77 05 [10字节版本] [12字节日期] [8字节时间]
-                    version_data = response[3:13]   # 10字节版本信息
-                    date_data = response[13:25]     # 12字节日期数据
-                    time_data = response[25:33]     # 8字节时间数据
-                    
-                    # 转换版本信息
-                    version_str = version_data.decode('ascii', errors='ignore').strip()
-                    
-                    # 转换日期信息（假设为ASCII格式）
-                    try:
-                        date_str = date_data.decode('ascii', errors='ignore').strip()
-                    except:
-                        date_str = "日期解析失败"
-                        
-                    # 转换时间信息（假设为ASCII格式）
-                    try:
-                        time_str = time_data.decode('ascii', errors='ignore').strip()
-                    except:
-                        time_str = "时间解析失败"
-                    
-                    # 更新版本信息标签
-                    self.version_label.config(
-                        text=f"Ver: {version_str}",
-                        foreground="green"
-                    )
-                    
-                    # 记录到tracehandler
-                    if self.ensure_trace_handler():
-                        log_msg = (
-                            f"完整版本信息:\n"
-                            f"  版本号: {version_str}\n"
-                            f"  日期: {date_str} (原始数据: {date_data.hex().upper()})\n"
-                            f"  时间: {time_str} (原始数据: {time_data.hex().upper()})"
-                        )
-                        self.trace_handler(log_msg)
-                    return True
-                else:
-                    err_msg = f"获取版本号失败，响应: {response.hex().upper() if response else '无响应'}"
-                    self.status_label.config(
-                        text=err_msg,
-                        foreground="red"
-                    )
-                    if self.ensure_trace_handler():
-                        self.trace_handler(err_msg)
-                    return False
-                    
-        except Exception as e:
-            err_msg = f"获取版本号异常: {str(e)}"
-            self.status_label.config(
-                text=err_msg,
-                foreground="red"
-            )
-            if self.ensure_trace_handler():
-                self.trace_handler(err_msg)
-            return False
