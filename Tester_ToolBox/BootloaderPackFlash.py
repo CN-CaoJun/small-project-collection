@@ -222,19 +222,26 @@ class FlashingProcess:
             self.log(f"HEX文件解析结果: 起始地址=0x{start_addr:04X}, 数据长度={data_length}字节")
             
             with self.client as client:
-                # 使用transfer_data方法发送数据
-                sequence_number = 1  # 序列号从1开始
-                response = client.transfer_data(sequence_number=sequence_number, data=hex_data)
+                # 使用原始发送方式替代transfer_data
+                # 构建36服务的请求数据：36 + sequence number + data
+                sequence_number = 0x01  # Start with sequence number 1 for first transfer
+                request = bytes([0x36, sequence_number]) + hex_data
+                client.conn.send(request)
                 
-                # 检查响应
-                if response and response.positive:
-                    self.log("数据传输成功")
+                # 等待响应，处理78 pending情况
+                response = client.conn.wait_frame(timeout=5)
+                
+                # 检查是否为78 pending响应
+                while response and response.hex().upper() == '7F3678':
+                    self.log("收到78 pending响应，继续等待...")
+                    # 重新等待最终响应
+                    response = client.conn.wait_frame(timeout=5)
+                
+                if response and response.hex().upper().startswith('76'):
+                    self.log(f"数据传输成功，响应: {response.hex().upper()}")
                     return True
                 else:
-                    error_msg = f"数据传输失败，响应: {response.code if response else 'None'}"
-                    if response and hasattr(response, 'data'):
-                        error_msg += f", 数据: {response.data.hex().upper()}"
-                    self.log(error_msg)
+                    self.log(f"数据传输失败，响应: {response.hex().upper() if response else 'None'}")
                     return False
                     
         except Exception as e:
