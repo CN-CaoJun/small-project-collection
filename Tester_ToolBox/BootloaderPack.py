@@ -277,7 +277,8 @@ class BootloaderPack:
                 response = client.ecu_reset(reset_type=1)
                 
                 if response and self.trace_handler:
-                    self.trace_handler("ECU复位命令已发送")
+                    # 打印完整的响应内容
+                    self.trace_handler(f"ECU复位命令已发送，响应内容: {response.data.hex().upper()}")
                 return True if response else False
                 
         except Exception as e:

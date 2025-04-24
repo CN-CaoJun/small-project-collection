@@ -22,7 +22,7 @@ class MainWindow(tk.Tk):
         
         self.title("Diagnostic ToolBox")
         self.geometry("750x800")
-        
+
         # 创建主框架
         self.main_frame = ttk.Frame(self)
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
