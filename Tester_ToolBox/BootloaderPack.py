@@ -48,8 +48,8 @@ class BootloaderPack:
                 'tx_data_length': 8,
                 'tx_data_min_length': None,
                 'tx_padding': 0,
-                'rx_flowcontrol_timeout': 1000,
-                'rx_consecutive_frame_timeout': 1000,
+                'rx_flowcontrol_timeout': 2000,    # 增加到2000毫秒
+                'rx_consecutive_frame_timeout': 2000,  # 增加到2000毫秒
                 'override_receiver_stmin': None,
                 'max_frame_size': 4095,
                 'can_fd': False,
@@ -84,6 +84,20 @@ class BootloaderPack:
             uds_config['data_identifiers'] = {
                 'default' : '>H',                     
             }
+            # 修改超时配置
+            uds_config['p2_timeout'] = 2  # 增加到2秒
+            uds_config['p2_star_timeout'] = 5  
+            uds_config['request_timeout'] = 4  # 增加总体超时时间
+            uds_config['session_timing'] = {
+                'p2_server_max': 2,  # 服务器最大响应时间
+                'p2_star_server_max': 5  # 服务器最大扩展响应时间
+            }
+            
+            # 打印UDS配置信息
+            if self.ensure_trace_handler():
+                self.trace_handler("UDS配置信息:")
+                for key, value in uds_config.items():
+                    self.trace_handler(f"  {key}: {value}")
             
             self.uds_client = Client(conn, config=uds_config)
             
@@ -94,25 +108,6 @@ class BootloaderPack:
         except Exception as e:
             if self.ensure_trace_handler():
                 self.trace_handler(f"UDS客户端初始化失败: {str(e)}")
-            return False
-            
-    def enter_programming_session(self):
-        """进入编程会话"""
-        try:
-            if not self.uds_client:
-                if not self.init_uds_client():
-                    return False
-                    
-            with self.uds_client as client:
-                # 切换到编程会话
-                response = client.change_session(2)  # 2 = 编程会话
-                if response and self.trace_handler:
-                    self.trace_handler("成功进入编程会话")
-                return True if response else False
-                
-        except Exception as e:
-            if self.ensure_trace_handler():
-                self.trace_handler(f"进入编程会话失败: {str(e)}")
             return False
             
     def close_uds_connection(self):

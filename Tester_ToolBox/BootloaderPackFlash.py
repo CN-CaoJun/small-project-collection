@@ -33,7 +33,61 @@ class FlashingProcess:
         """输出日志"""
         if self.trace_handler:
             self.trace_handler(message)
+    def read_hex_file(self, hex_file_path: str) -> Tuple[Optional[bytes], Optional[int], Optional[int]]:
+        """Read hex file and extract data, start address and length
+        
+        Args:
+            hex_file_path: Path to the hex file
             
+        Returns:
+            Tuple containing:
+            - Binary data bytes
+            - Start address
+            - Data length
+            Or (None, None, None) if parsing fails
+        """
+        try:
+            if not os.path.exists(hex_file_path):
+                self.log(f"Error: HEX file does not exist: {hex_file_path}")
+                return None, None, None
+                
+            data_segments = []
+            start_addr = None
+            total_length = 0
+            
+            with open(hex_file_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line.startswith(':'):
+                        continue
+                        
+                    # Remove colon and convert to bytes
+                    record = bytes.fromhex(line[1:])
+                    
+                    # Parse record
+                    length = record[0]
+                    addr = (record[1] << 8) | record[2]
+                    record_type = record[3]
+                    data = record[4:-1]  # Exclude checksum
+                    
+                    if record_type == 0x00:  # Data record
+                        if start_addr is None:
+                            start_addr = addr
+                        data_segments.append(data)
+                        total_length += len(data)
+                        
+            if data_segments:
+                # Combine all data segments
+                complete_data = b''.join(data_segments)
+                self.log(f"Successfully read HEX file. Start address: 0x{start_addr:04X}, Length: {total_length} bytes")
+                return complete_data, start_addr, total_length
+            else:
+                self.log("Error: No valid data found in HEX file")
+                return None, None, None
+                
+        except Exception as e:
+            self.log(f"Error reading HEX file: {str(e)}")
+            return None, None, None
     def change_session(self, session_type: int) -> bool:
         """步骤1和3: 切换诊断会话"""
         self.log(f"步骤: 切换到会话类型 0x{session_type:02X}")
@@ -158,31 +212,31 @@ class FlashingProcess:
             if not os.path.exists(hex_file_path):
                 self.log(f"错误: HEX文件不存在: {hex_file_path}")
                 return False
+            
+            # 使用read_hex_file方法读取数据
+            hex_data, start_addr, data_length = self.read_hex_file(hex_file_path)
+            if hex_data is None:
+                self.log("读取HEX文件失败")
+                return False
                 
+            self.log(f"HEX文件解析结果: 起始地址=0x{start_addr:04X}, 数据长度={data_length}字节")
+            
             with self.client as client:
-                # 读取hex文件内容
-                with open(hex_file_path, 'rb') as f:
-                    hex_data = f.read()
-                    
-                # 发送数据块
-                sequence = 1
-                request = bytes([0x36, sequence]) + hex_data
-                client.conn.send(request)
+                # 使用transfer_data方法发送数据
+                sequence_number = 1  # 序列号从1开始
+                response = client.transfer_data(sequence_number=sequence_number, data=hex_data)
                 
-                # 等待中间响应 (7F 36 78)
-                response = client.conn.wait_frame(timeout=3)
-                if not response or response.hex().upper() != '7F3678':
-                    self.log(f"未收到预期的中间响应，收到: {response.hex().upper() if response else 'None'}")
-                    return False
-                    
-                # 等待最终响应 (76 01)
-                final_response = client.conn.wait_frame(timeout=10)  # 增加超时时间
-                if final_response and final_response.hex().upper() == '7601':
+                # 检查响应
+                if response and response.positive:
                     self.log("数据传输成功")
                     return True
                 else:
-                    self.log(f"数据传输失败，响应: {final_response.hex().upper() if final_response else 'None'}")
+                    error_msg = f"数据传输失败，响应: {response.code if response else 'None'}"
+                    if response and hasattr(response, 'data'):
+                        error_msg += f", 数据: {response.data.hex().upper()}"
+                    self.log(error_msg)
                     return False
+                    
         except Exception as e:
             self.log(f"数据传输异常: {str(e)}")
             return False
