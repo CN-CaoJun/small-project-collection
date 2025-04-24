@@ -143,6 +143,31 @@ class ConnectionPack:
             except Exception as e:
                 print(f"PCAN scan error: {str(e)}")
 
+            # 新增SLCAN串口扫描
+            try:
+                from can.interfaces import slcan
+                from serial.tools.list_ports import comports
+                
+                # 扫描所有可用串口
+                for port in comports():
+                    print(f"Found port: {port.device}, location: {port.location}")
+                    if port.location is not None:
+                        channel_name = f"SLCAN: {port.device}"
+                        channel_list.append(channel_name)
+                        self.channel_configs[channel_name] = {
+                            'type': 'slcan',
+                            'port': port.device,
+                            'description': port.description,
+                            'hwid': port.hwid
+                        }
+                        # 新增调试信息打印
+                        print(f"SLCAN设备信息 - 端口: {port.device}")
+                        print(f"描述: {port.description}")
+                        print(f"硬件ID: {port.hwid}\n")
+                        
+            except Exception as e:
+                print(f"SLCAN scan error: {str(e)}")
+
             # Update UI
             if channel_list:
                 self.hardware_combo['values'] = channel_list
@@ -233,13 +258,19 @@ class ConnectionPack:
                     channel=channel_config['hw_channel'],  
                     **params
                 )
+            elif channel_config['type'] == 'slcan':
+                from can.interfaces.slcan import slcanBus
+                self.can_bus = slcanBus(
+                    channel=channel_config['port'],
+                    bitrate = 500000,
+                )
             # Disable all controls in connection frame
             self.hardware_combo.configure(state='disabled')
             self.scan_button.configure(state='disabled')
             self.baudrate_entry.configure(state='disabled')
             self.canfd_check.configure(state='disabled')
             
-            print(f"CAN channel initialized successfully: {selected_channel} (ID: {channel_config['hw_channel'] if channel_config['type'] == 'vector' else channel_config['handle']:02X})")  # 修改这里的属性访问方式
+            # print(f"CAN channel initialized successfully: {selected_channel} (ID: {channel_config['hw_channel'] if channel_config['type'] == 'vector' else channel_config['handle']:02X})")  # 修改这里的属性访问方式
             
         except Exception as e:
             self.show_error(f"Failed to initialize CAN channel: {str(e)}")
