@@ -19,104 +19,105 @@ import time
 class DiagnosticPack:
     def __init__(self, parent):
         self.parent = parent
-        self.receive_active = False  # 控制接收线程的标志
-        self.receive_thread = None   # 接收线程对象
+        self.receive_active = False  # Flag to control receive thread
+        self.receive_thread = None   # Receive thread object
         self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
         self.create_widgets()
         
     def create_widgets(self):
-        # TP层参数设置框架
+        # ISO-TP Parameters frame
         self.tp_params_frame = ttk.LabelFrame(self.parent, text="ISO-TP Parameters")
         self.tp_params_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # 创建一个框架来容纳所有参数设置
+        # Create a frame to contain all parameter settings
         self.params_container = ttk.Frame(self.tp_params_frame)
         self.params_container.pack(fill=tk.X, padx=5, pady=2)
         
-        # TXID设置
+        # TXID settings
         self.txid_frame = ttk.Frame(self.params_container)
         self.txid_frame.pack(side=tk.LEFT)
-        ttk.Label(self.txid_frame, text="TXID:").pack(anchor=tk.W)  # 使用anchor=tk.W实现左对齐
+        ttk.Label(self.txid_frame, text="TXID:").pack(anchor=tk.W)  # Use anchor=tk.W for left alignment
         self.txid_entry = ttk.Entry(self.txid_frame, width=8)
         self.txid_entry.insert(0, "0x749")
         self.txid_entry.pack()
         
+        # Add 10 pixel spacing
         ttk.Frame(self.params_container, width=10).pack(side=tk.LEFT)
         
-        # RXID设置
+        # RXID settings
         self.rxid_frame = ttk.Frame(self.params_container)
         self.rxid_frame.pack(side=tk.LEFT)
-        ttk.Label(self.rxid_frame, text="RXID:").pack(anchor=tk.W)  # 使用anchor=tk.W实现左对齐
+        ttk.Label(self.rxid_frame, text="RXID:").pack(anchor=tk.W)  # Use anchor=tk.W for left alignment
         self.rxid_entry = ttk.Entry(self.rxid_frame, width=8)
         self.rxid_entry.insert(0, "0x759")
         self.rxid_entry.pack()
         
         ttk.Frame(self.params_container, width=10).pack(side=tk.LEFT)
         
-        # STMIN设置
+        # STMIN settings
         self.stmin_frame = ttk.Frame(self.params_container)
         self.stmin_frame.pack(side=tk.LEFT)
-        ttk.Label(self.stmin_frame, text="stmin:").pack(anchor=tk.W)  # 使用anchor=tk.W实现左对齐
+        ttk.Label(self.stmin_frame, text="stmin:").pack(anchor=tk.W)  # Use anchor=tk.W for left alignment
         self.stmin_entry = ttk.Entry(self.stmin_frame, width=8)
         self.stmin_entry.insert(0, "0x04")
         self.stmin_entry.pack()
         
-        # 添加10像素间隔
+        # Add 10 pixel spacing
         ttk.Frame(self.params_container, width=10).pack(side=tk.LEFT)
         
-        # BLOCKSIZE设置
+        # BLOCKSIZE settings
         self.block_frame = ttk.Frame(self.params_container)
         self.block_frame.pack(side=tk.LEFT)
-        ttk.Label(self.block_frame, text="blocksize:").pack(anchor=tk.W)  # 使用anchor=tk.W实现左对齐
+        ttk.Label(self.block_frame, text="blocksize:").pack(anchor=tk.W)  # Use anchor=tk.W for left alignment
         self.block_entry = ttk.Entry(self.block_frame, width=8)
         self.block_entry.insert(0, "0x08")
         self.block_entry.pack()
         
-        # 添加10像素间隔
+        # Add 10 pixel spacing
         ttk.Frame(self.params_container, width=10).pack(side=tk.LEFT)
         
-        # PADDING设置
+        # PADDING settings
         self.padding_frame = ttk.Frame(self.params_container)
         self.padding_frame.pack(side=tk.LEFT)
-        ttk.Label(self.padding_frame, text="padding:").pack(anchor=tk.W)  # 使用anchor=tk.W实现左对齐
+        ttk.Label(self.padding_frame, text="padding:").pack(anchor=tk.W)  # Use anchor=tk.W for left alignment
         self.padding_entry = ttk.Entry(self.padding_frame, width=8)
         self.padding_entry.insert(0, "0x00")
         self.padding_entry.pack()
         
-        # 添加10像素间隔
+        # Add 10 pixel spacing
         ttk.Frame(self.params_container, width=5).pack(side=tk.LEFT)
 
-        # 添加Operation标签和按钮的框架
+        # Add Operation tag and button frame
         self.operation_frame = ttk.Frame(self.params_container)
         self.operation_frame.pack(side=tk.LEFT)
         
         ttk.Label(self.operation_frame, text="  ").pack(anchor=tk.W)
         
-        # Enable Diag按钮
+        # Enable Diag button
         self.enable_button = ttk.Checkbutton(
-            self.operation_frame,  # 改为新的框架容器
+            self.operation_frame,  # Change to new frame container
             text="Enable Diag",
             style="Toggle.TButton",
             command=self.on_enable_diag
         )
-        self.enable_button.pack(padx=(5,0))  # 调整间距
+        self.enable_button.pack(padx=(5,0))  # Adjust spacing
 
         
-        # 消息发送框架
+        # Message sending frame
         self.msg_frame = ttk.LabelFrame(self.parent, text="Diag Request")
         self.msg_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # 创建一个框架来容纳输入框和按钮
+        # Create a frame to contain input box and button
         self.input_container = ttk.Frame(self.msg_frame)
         self.input_container.pack(fill=tk.X, padx=5, pady=2)
         
-        # 消息输入框
+        # Message input box
         self.msg_input = ttk.Entry(self.input_container, validate="key", 
                                  validatecommand=(self.parent.register(self.on_hex_input), '%P'))
         self.msg_input.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         
         ttk.Label(self.input_container, text="(Hex: 11 22 33)").pack(side=tk.LEFT)
-        # 添加保持会话按钮
+        # Add keep alive button
         self.keep_alive_button = ttk.Checkbutton(
             self.input_container,
             text="Keep Alive: OFF",
@@ -125,23 +126,23 @@ class DiagnosticPack:
         )
         self.keep_alive_button.pack(side=tk.LEFT, padx=(0, 5))
         
-        # 发送按钮
+        # Send button
         self.send_button = ttk.Button(self.input_container, text="Send", command=self.send_message)
         self.send_button.pack(side=tk.LEFT)
-        self.send_button.configure(state='disabled')  # 初始状态设为禁用
+        self.send_button.configure(state='disabled')  # Initial state set to disabled
         
-        # 消息显示框
-        # 注释或删除消息显示框创建代码
+        # Message display box
+        # Comment or delete message display box creation code
         # self.msg_display = tk.Text(self.msg_frame, height=10)
         # self.msg_display.pack(fill=tk.BOTH, padx=5, pady=2)
         
-        # 添加ISO-TP栈属性
+        # Add ISO-TP stack property
         self.tp_stack = None
         
     def on_enable_diag(self):
-        """处理Enable Diag按钮的状态变化"""
+        """Handle Enable Diag button state change"""
         if self.enable_button.instate(['selected']):
-            # 禁用所有参数输入控件
+            # Disable all parameter input controls
             for child in self.params_container.winfo_children():
                 if isinstance(child, (ttk.Entry, ttk.Frame)):
                     for widget in child.winfo_children():
@@ -153,7 +154,7 @@ class DiagnosticPack:
             else:
                 self.send_button.configure(state='normal')
         else:
-            # 启用所有参数输入控件
+            # Enable all parameter input controls
             for child in self.params_container.winfo_children():
                 if isinstance(child, (ttk.Entry, ttk.Frame)):
                     for widget in child.winfo_children():
@@ -163,29 +164,30 @@ class DiagnosticPack:
             self.send_button.configure(state='disabled')
             
     def initialize_tp_layer(self):
-        """初始化ISO-TP层"""
+        """Initialize ISO-TP layer"""
         try:
-            # 获取主窗口的CAN总线对象
+            # Get CAN bus object from main window
             main_window = self.parent.winfo_toplevel()
             can_bus = main_window.connection.get_can_bus()
             
             if not can_bus:
-                print("ERROR：CAN总线未初始化")
+                if self.ensure_trace_handler():
+                    self.trace_handler("ERROR: CAN bus not initialized")
                 return
                 
-            # 获取TP层参数
+            # Get TP layer parameters
             stmin = int(self.stmin_entry.get(), 16)
             blocksize = int(self.block_entry.get(), 16)
             padding = int(self.padding_entry.get(), 16)
             
-            # 获取ID
+            # Get IDs
             txid = int(self.txid_entry.get(), 16)
             rxid = int(self.rxid_entry.get(), 16)
             
-            # 创建ISO-TP地址
+            # Create ISO-TP address
             tp_addr = isotp.Address(isotp.AddressingMode.Normal_11bits, txid=txid, rxid=rxid)
             
-            # 创建ISO-TP参数
+            # Create ISO-TP parameters
             tp_params = {
                 'stmin': stmin,
                 'blocksize': blocksize,
@@ -194,10 +196,10 @@ class DiagnosticPack:
                 'rx_consecutive_frame_timeout': 1000
             }
             
-            # 创建 notifier
+            # Create notifier
             self.notifier = can.Notifier(can_bus, [])
             
-            # 创建ISO-TP栈
+            # Create ISO-TP stack
             self.tp_stack = isotp.NotifierBasedCanStack(
                 bus=can_bus,
                 notifier=self.notifier,
@@ -205,134 +207,138 @@ class DiagnosticPack:
                 params=tp_params
             )
             
-            # 启动 ISO-TP 栈
+            # Start ISO-TP stack
             self.tp_stack.start()
             
-            # 启用发送按钮
+            # Enable send button
             self.send_button.configure(state='normal')
             
-            # 创建接收线程
+            # Create receive thread
             self.receive_active = True
             self.receive_thread = threading.Thread(target=self.receive_loop, daemon=True)
             self.receive_thread.start()
             
-            print(f"ISO-TP Layer init success -- Request ID: 0x{txid:03X}, Response ID: 0x{rxid:03X}")
+            if self.ensure_trace_handler():
+                self.trace_handler(f"ISO-TP Layer init success -- Request ID: 0x{txid:03X}, Response ID: 0x{rxid:03X}")
             
         except Exception as e:
-            print(f"ERROR：{str(e)}")
+            if self.ensure_trace_handler():
+                self.trace_handler(f"ERROR: {str(e)}")
 
     def release_tp_layer(self):
-        """释放ISO-TP层"""
-        # 首先停止接收线程
+        """Release ISO-TP layer"""
+        # First stop receive thread
         self.receive_active = False
         if self.receive_thread and self.receive_thread.is_alive():
-            self.receive_thread.join(timeout=1.0)  # 等待接收线程结束
+            self.receive_thread.join(timeout=1.0)  # Wait for receive thread to end
         
         if self.tp_stack:
-            self.tp_stack.stop()  # 停止 ISO-TP 栈
+            self.tp_stack.stop()  # Stop ISO-TP stack
             self.tp_stack = None
             
             if hasattr(self, 'notifier'):
-                self.notifier.stop()  # 停止 notifier
+                self.notifier.stop()  # Stop notifier
                 self.notifier = None
                 
-            print("ISO-TP Layer released")
+            if self.ensure_trace_handler():
+                self.trace_handler("ISO-TP Layer released")
             
     def send_message(self):
-        """发送诊断消息"""
+        """Send diagnostic message"""
         try:
             if not self.tp_stack:
-                print("ERROR：ISO-TP Layer no init")
+                if self.ensure_trace_handler():
+                    self.trace_handler("ERROR: ISO-TP Layer not initialized")
                 return
                 
-            # 获取并解析十六进制数据
+            # Get and parse hex data
             hex_str = self.msg_input.get().replace(" ", "")
             if not hex_str:
-                print("ERROR：请输入十六进制数据")
+                if self.ensure_trace_handler():
+                    self.trace_handler("ERROR: Please input hex data")
                 return
                 
-            # 自动补零处理奇数长度
+            # Auto pad zero for odd length
             if len(hex_str) % 2 != 0:
-                last_nibble = hex_str[-1]  # 获取最后半字节
-                hex_str = hex_str[:-1] + f"{int(last_nibble, 16):02X}"  # 高位补零
-                # self.msg_display.insert(tk.END, f"注意：已补高位零 → {' '.join(hex_str[i:i+2] for i in range(0, len(hex_str), 2))}\n")
+                last_nibble = hex_str[-1]  # Get last half byte
+                hex_str = hex_str[:-1] + f"{int(last_nibble, 16):02X}"  # Pad high nibble with zero
                 
             try:
                 data = bytes.fromhex(hex_str)
             except ValueError as e:
-                self.msg_display.insert(tk.END, f"ERROR：无效的十六进制数据 - {str(e)}\n")
+                if self.ensure_trace_handler():
+                    self.trace_handler(f"ERROR: Invalid hex data - {str(e)}")
                 return
                 
-            # 发送消息
+            # Send message
             self.tp_stack.send(data)
             
-            # 显示发送信息（添加时间戳）
+            # Display send info (with timestamp)
             timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             
             if self.ensure_trace_handler():
-                self.trace_handler(f"Req: {hex_str.upper()}")
-            
-            print(f"[{timestamp}] Req: {hex_str.upper()}")
+                self.trace_handler(f"TX: {hex_str.upper()}")
             
         except Exception as e:
-            print(f"ERROR：{str(e)}")
+            if self.ensure_trace_handler():
+                self.trace_handler(f"ERROR: {str(e)}")
 
     def receive_loop(self):
-        """后台接收线程循环"""
+        """Background receive thread loop"""
         while self.receive_active and self.tp_stack:
             try:
                 response = self.tp_stack.recv(timeout=0.01)
                 if response:
-                    # 传递原始数据和当前时间戳到主线程
+                    # Pass raw data and current timestamp to main thread
                     timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                     self.parent.after(0, self.update_display, response, timestamp)
             except Exception as e:
                 if self.receive_active:
                     error_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                    self.parent.after(0, self.show_error, 
-                                    f"[{error_time}] Recv ERROR：{str(e)}")
+                    if self.ensure_trace_handler():
+                        self.trace_handler(f"[{error_time}] RX ERROR: {str(e)}")
 
     def update_display(self, data, timestamp):
-        """更新显示内容（主线程执行）"""
+        """Update display content (executed in main thread)"""
         try:
             hex_str = ' '.join(f"{b:02X}" for b in data)
             if self.ensure_trace_handler():
-                self.trace_handler(f"Res: {hex_str}")
-                
-            print(f"[{timestamp}] Res: {hex_str}")
+                self.trace_handler(f"RX: {hex_str}")
         except Exception as e:
-            print(f"Display ERROR：{str(e)}")
+            if self.ensure_trace_handler():
+                self.trace_handler(f"Display ERROR: {str(e)}")
 
     def show_error(self, error_msg):
-        """显示ERROR信息"""
+        """Show error message"""
         self.msg_display.insert(tk.END, f"{error_msg}\n")
         self.msg_display.see(tk.END)
 
     def on_hex_input(self, new_value):
-        """处理十六进制输入格式化"""
-        # 过滤非法字符
+        """Handle hex input formatting"""
+        # Filter invalid characters
         filtered = ''.join([c for c in new_value.upper() if c in '0123456789ABCDEF '])
-        # 格式化添加空格
+        # Format with spaces
         clean_str = filtered.replace(' ', '')
         formatted = ' '.join(clean_str[i:i+2] for i in range(0, len(clean_str), 2))
-        # 更新输入框
+        # Update input field
         self.msg_input.delete(0, tk.END)
         self.msg_input.insert(0, formatted.strip())
-        return False  # 阻止默认处理
+        return False  # Prevent default handling
+
     def format_hex_input(self, event):
-        """处理键盘释放事件后的格式化"""
+        """Handle keyboard release event formatting"""
         content = self.msg_input.get().replace(" ", "")
-        # 移除非十六进制字符
+        # Remove non-hex characters
         content = ''.join(c for c in content if c in '0123456789ABCDEF')
-        # 每两个字符添加一个空格
+        # Add space every two characters
         formatted = ' '.join(content[i:i+2] for i in range(0, len(content), 2))
-        # 更新Entry的内容
+        # Update Entry content
         self.msg_input.delete(0, tk.END)
         self.msg_input.insert(0, formatted)
-        self.msg_input.bind('<KeyRelease>', self.format_hex_input)  # 添加KeyRelease事件绑定
-
     def on_keep_alive(self):
-        """处理保持会话按钮状态变化"""
+        """Handle keep alive button state change"""
+        if self.ensure_trace_handler():
+            self.trace_handler("Start 3E 00")
         if self.keep_alive_button.instate(['selected']):
             self.keep_alive_active = True
             self.keep_alive_button.configure(text="3E00: ON")
@@ -342,26 +348,29 @@ class DiagnosticPack:
             self.keep_alive_button.configure(text="3E00: OFF")
 
     def start_keep_alive(self):
-        """启动保持会话线程"""
+        """Start keep alive thread"""
         self.keep_alive_thread = threading.Thread(target=self.send_keep_alive, daemon=True)
         self.keep_alive_thread.start()
 
     def stop_keep_alive(self):
-        """停止保持会话"""
+        """Stop keep alive"""
         self.keep_alive_active = False
+        if self.ensure_trace_handler():
+            self.trace_handler("Stop 3E 00")
         if self.keep_alive_thread and self.keep_alive_thread.is_alive():
             self.keep_alive_thread.join(timeout=1.0)
 
     def send_keep_alive(self):
-        """定时发送3E00"""
+        """Send 3E00 periodically"""
         while self.keep_alive_active and self.tp_stack:
             try:
                 data = bytes.fromhex("3E00")
                 self.tp_stack.send(data)
-                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                print(f"[{timestamp}] Keep Alive: 3E 00")
+                if self.ensure_trace_handler():
+                    self.trace_handler(f"Keep Alive: 3E 00")
             except Exception as e:
-                print(f"Keep Alive Error: {str(e)}")
+                if self.ensure_trace_handler():
+                    self.trace_handler(f"Keep Alive Error: {str(e)}")
             time.sleep(3.5)
             
     def ensure_trace_handler(self):
