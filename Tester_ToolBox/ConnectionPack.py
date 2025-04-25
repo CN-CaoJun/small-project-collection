@@ -19,11 +19,10 @@ class ConnectionPack:
         self.parent = parent
         self.can_bus = None
         self.connected = False
-        # Add CAN bus object property
-        self.can_bus = None
         # Store channel configuration information
         self.channel_configs = {}
         # 创建控件
+        self.fdcan = False
         self.create_widgets()
         
     def create_widgets(self):
@@ -194,10 +193,11 @@ class ConnectionPack:
         if self.canfd_var.get():
             self.baudrate_entry.delete(0, tk.END)
             self.baudrate_entry.insert(0, self.default_canfd_params)
+            self.fdcan = True
         else:
             self.baudrate_entry.delete(0, tk.END)
             self.baudrate_entry.insert(0, self.default_can_params)
-    
+            self.fdcan = False
     def on_init_toggle(self):
         """处理Initialize toggle按钮的状态变化"""
         if self.init_button.instate(['selected']):
@@ -327,7 +327,11 @@ class ConnectionPack:
             self.show_error(f"Parameter format error: {str(e)}")
             return None
     def get_can_bus(self):
-        """获取当前CAN总线对象"""
-        return self.can_bus
+        """获取当前CAN总线对象和FD-CAN状态
+        
+        Returns:
+            tuple: (can_bus, fdcan) - CAN总线对象和FD-CAN状态标志
+        """
+        return self.can_bus, self.fdcan
     
     

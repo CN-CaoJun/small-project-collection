@@ -39,16 +39,14 @@ class MainWindow(tk.Tk):
         self.bootloader_frame = ttk.LabelFrame(self.main_frame, text="IMS Bootloader")
         self.bootloader_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # 初始化各个功能模块
-        self.init_connection_pack()
-        self.init_diagnostic_pack()
-        self.init_bootloader_pack()
-        
         # 添加Trace Pack框架
         self.trace_frame = ttk.LabelFrame(self.main_frame, text="Trace Messages")
         self.trace_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # 初始化Trace Pack
+        # 初始化各个功能模块
+        self.init_connection_pack()
+        self.init_diagnostic_pack()
+        self.init_bootloader_pack()
         self.init_trace_pack()
         
     def get_trace_handler(self):

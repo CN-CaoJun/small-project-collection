@@ -168,7 +168,7 @@ class DiagnosticPack:
         try:
             # Get CAN bus object from main window
             main_window = self.parent.winfo_toplevel()
-            can_bus = main_window.connection.get_can_bus()
+            can_bus, is_fd = main_window.connection.get_can_bus()
             
             if not can_bus:
                 if self.ensure_trace_handler():
@@ -187,18 +187,50 @@ class DiagnosticPack:
             # Create ISO-TP address
             tp_addr = isotp.Address(isotp.AddressingMode.Normal_11bits, txid=txid, rxid=rxid)
             
-            # Create ISO-TP parameters
-            tp_params = {
-                'stmin': stmin,
-                'blocksize': blocksize,
-                'tx_padding': padding,
-                'rx_flowcontrol_timeout': 1000,
-                'rx_consecutive_frame_timeout': 1000
-            }
+            # Create ISO-TP parameters based on CAN type
+            if is_fd:
+                tp_params = {
+                    'stmin': stmin,
+                    'blocksize': blocksize,
+                    'tx_padding': padding,
+                    'override_receiver_stmin': None,
+                    'wftmax': 4,
+                    'tx_data_length': 64,
+                    'tx_data_min_length':8,
+                    'rx_flowcontrol_timeout': 1000,
+                    'rx_consecutive_frame_timeout': 100,
+                    'can_fd': True,
+                    'max_frame_size': 4095,
+                    'bitrate_switch': False,
+                    'rate_limit_enable': False,
+                    'listen_mode': False,
+                    'blocking_send': False
+                }
+                if self.ensure_trace_handler():
+                    self.trace_handler("Using CAN-FD ISO-TP parameters")
+            else:
+                tp_params = {
+                    'stmin': stmin,
+                    'blocksize': blocksize,
+                    'tx_padding': padding,
+                    'override_receiver_stmin': None,
+                    'wftmax': 4,
+                    'tx_data_length': 8,
+                    'tx_data_min_length':8,
+                    'rx_flowcontrol_timeout': 1000,
+                    'rx_consecutive_frame_timeout': 100,
+                    'can_fd': False,
+                    'max_frame_size': 4095,
+                    'bitrate_switch': False,
+                    'rate_limit_enable': False,
+                    'listen_mode': False,
+                    'blocking_send': False  
+                }
+                if self.ensure_trace_handler():
+                    self.trace_handler("Using Standard CAN ISO-TP parameters")
             
             # Create notifier
             self.notifier = can.Notifier(can_bus, [])
-            
             # Create ISO-TP stack
             self.tp_stack = isotp.NotifierBasedCanStack(
                 bus=can_bus,
@@ -206,13 +238,10 @@ class DiagnosticPack:
                 address=tp_addr,
                 params=tp_params
             )
-            
             # Start ISO-TP stack
             self.tp_stack.start()
-            
             # Enable send button
             self.send_button.configure(state='normal')
-            
             # Create receive thread
             self.receive_active = True
             self.receive_thread = threading.Thread(target=self.receive_loop, daemon=True)
