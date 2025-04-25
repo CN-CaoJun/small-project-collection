@@ -21,6 +21,7 @@ class DiagnosticPack:
         self.parent = parent
         self.receive_active = False  # 控制接收线程的标志
         self.receive_thread = None   # 接收线程对象
+        self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
         self.create_widgets()
         
     def create_widgets(self):
@@ -130,8 +131,9 @@ class DiagnosticPack:
         self.send_button.configure(state='disabled')  # 初始状态设为禁用
         
         # 消息显示框
-        self.msg_display = tk.Text(self.msg_frame, height=10)
-        self.msg_display.pack(fill=tk.BOTH, padx=5, pady=2)
+        # 注释或删除消息显示框创建代码
+        # self.msg_display = tk.Text(self.msg_frame, height=10)
+        # self.msg_display.pack(fill=tk.BOTH, padx=5, pady=2)
         
         # 添加ISO-TP栈属性
         self.tp_stack = None
@@ -168,7 +170,7 @@ class DiagnosticPack:
             can_bus = main_window.connection.get_can_bus()
             
             if not can_bus:
-                self.msg_display.insert(tk.END, "ERROR：CAN总线未初始化\n")
+                print("ERROR：CAN总线未初始化")
                 return
                 
             # 获取TP层参数
@@ -214,14 +216,11 @@ class DiagnosticPack:
             self.receive_thread = threading.Thread(target=self.receive_loop, daemon=True)
             self.receive_thread.start()
             
-            self.msg_display.insert(tk.END, f"ISO-TP Layer init success -- ")
-            self.msg_display.insert(tk.END, f"Request ID: 0x{txid:03X}, Response ID: 0x{rxid:03X}\n")
-            self.msg_display.see(tk.END)
+            print(f"ISO-TP Layer init success -- Request ID: 0x{txid:03X}, Response ID: 0x{rxid:03X}")
             
         except Exception as e:
-            self.msg_display.insert(tk.END, f"ERROR：{str(e)}\n")
-            self.msg_display.see(tk.END)
-            
+            print(f"ERROR：{str(e)}")
+
     def release_tp_layer(self):
         """释放ISO-TP层"""
         # 首先停止接收线程
@@ -237,20 +236,19 @@ class DiagnosticPack:
                 self.notifier.stop()  # 停止 notifier
                 self.notifier = None
                 
-            self.msg_display.insert(tk.END, "ISO-TP Layer released\n")
-            self.msg_display.see(tk.END)
+            print("ISO-TP Layer released")
             
     def send_message(self):
         """发送诊断消息"""
         try:
             if not self.tp_stack:
-                self.msg_display.insert(tk.END, "ERROR：ISO-TP Layer no init\n")
+                print("ERROR：ISO-TP Layer no init")
                 return
                 
             # 获取并解析十六进制数据
             hex_str = self.msg_input.get().replace(" ", "")
             if not hex_str:
-                self.msg_display.insert(tk.END, "ERROR：请输入十六进制数据\n")
+                print("ERROR：请输入十六进制数据")
                 return
                 
             # 自动补零处理奇数长度
@@ -270,12 +268,15 @@ class DiagnosticPack:
             
             # 显示发送信息（添加时间戳）
             timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-            self.msg_display.insert(tk.END, f"[{timestamp}] Req: {hex_str.upper()}\n")
-            self.msg_display.see(tk.END)
+            
+            if self.ensure_trace_handler():
+                self.trace_handler(f"Req: {hex_str.upper()}")
+            
+            print(f"[{timestamp}] Req: {hex_str.upper()}")
             
         except Exception as e:
-            self.msg_display.insert(tk.END, f"ERROR：{str(e)}\n")
-            self.msg_display.see(tk.END)
+            print(f"ERROR：{str(e)}")
+
     def receive_loop(self):
         """后台接收线程循环"""
         while self.receive_active and self.tp_stack:
@@ -295,11 +296,13 @@ class DiagnosticPack:
         """更新显示内容（主线程执行）"""
         try:
             hex_str = ' '.join(f"{b:02X}" for b in data)
-            self.msg_display.insert(tk.END, f"[{timestamp}] Res: {hex_str}\n")
-            self.msg_display.see(tk.END)
+            if self.ensure_trace_handler():
+                self.trace_handler(f"Res: {hex_str}")
+                
+            print(f"[{timestamp}] Res: {hex_str}")
         except Exception as e:
-            self.show_error(f"Display ERROR：{str(e)}")
-            
+            print(f"Display ERROR：{str(e)}")
+
     def show_error(self, error_msg):
         """显示ERROR信息"""
         self.msg_display.insert(tk.END, f"{error_msg}\n")
@@ -356,9 +359,13 @@ class DiagnosticPack:
                 data = bytes.fromhex("3E00")
                 self.tp_stack.send(data)
                 timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                self.msg_display.insert(tk.END, f"[{timestamp}] Keep Alive: 3E 00\n")
-                self.msg_display.see(tk.END)
+                print(f"[{timestamp}] Keep Alive: 3E 00")
             except Exception as e:
-                self.msg_display.insert(tk.END, f"Keep Alive Error: {str(e)}\n")
-                self.msg_display.see(tk.END)
-            time.sleep(3)
+                print(f"Keep Alive Error: {str(e)}")
+            time.sleep(3.5)
+            
+    def ensure_trace_handler(self):
+        """Ensure trace_handler is available"""
+        if self.trace_handler is None:
+            self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
+        return self.trace_handler is not None

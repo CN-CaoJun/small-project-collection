@@ -22,9 +22,10 @@ class TracePack:
     def append_message(self, msg):
         """追加新的CAN消息"""
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        # msg could be any type, convert to string for display
         msg_str = f"[{timestamp}] {str(msg)}\n"
         self.msg_display.insert(tk.END, msg_str)
-        self.msg_display.see(tk.END)  # 自动滚动到最新消息
+        self.msg_display.see(tk.END)
         
     def clear_display(self):
         """清除显示区域的所有消息"""
