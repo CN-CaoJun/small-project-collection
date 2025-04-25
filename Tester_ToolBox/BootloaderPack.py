@@ -109,11 +109,11 @@ class BootloaderPack:
                 'default' : '>H',                     
             }
             # Modify timeout configuration
-            uds_config['p2_timeout'] = 2  # Increased to 2 seconds
+            uds_config['p2_timeout'] = 5  # Increased to 2 seconds
             uds_config['p2_star_timeout'] = 5  
             uds_config['request_timeout'] = 4  # Increased total timeout
             uds_config['session_timing'] = {
-                'p2_server_max': 2,  # Server maximum response time
+                'p2_server_max': 3,  # Server maximum response time
                 'p2_star_server_max': 5  # Server maximum extended response time
             }
             
@@ -362,7 +362,7 @@ class BootloaderPack:
                     return True
                 else:
                     err_msg = f"Failed to get version, response: {response.hex().upper() if response else 'No response'}"
-                    self.status_label.config(
+                    self.version_label.config(
                         text=err_msg,
                         foreground="red"
                     )
@@ -372,7 +372,7 @@ class BootloaderPack:
                     
         except Exception as e:
             err_msg = f"Version retrieval exception: {str(e)}"
-            self.status_label.config(
+            self.version_label.config(
                 text=err_msg,
                 foreground="red"
             )

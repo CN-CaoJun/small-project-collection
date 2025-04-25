@@ -203,7 +203,7 @@ class FlashingProcess:
                 self.log("Failed to read HEX file")
                 return False
                 
-            self.log(f"HEX file parse result: Start address=0x{start_addr:04X}, Data length={data_length} bytes")
+            self.log(f"HEX file parse result: Start address=0x{start_addr:04X}, Data length=0x{data_length:04X} bytes")
             
             with self.client as client:
                 # Use raw send method instead of transfer_data
@@ -351,7 +351,7 @@ class FlashingProcess:
                 self.log("Failed to read HEX file")
                 return False
                 
-            self.log(f"HEX file parse result: Start address=0x{start_addr:04X}, Data length={data_length} bytes")
+            self.log(f"HEX file parse result: Start address=0x{start_addr:04X}, Data length=0x{data_length:04X} bytes")
             
             with self.client as client:
                 # Get max package length from 34 service response (example response: 74 20 0F FA)
