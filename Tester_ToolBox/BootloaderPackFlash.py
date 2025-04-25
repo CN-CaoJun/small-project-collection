@@ -3,6 +3,7 @@ from tkinter import ttk
 import sv_ttk
 import sys
 import os
+import intelhex
 
 sys.path.insert(0, os.path.abspath("reference_modules/python-can"))
 sys.path.insert(0, os.path.abspath("reference_modules/python-can-isotp"))
@@ -30,11 +31,11 @@ class FlashingProcess:
         self.firmware_folder = None
         
     def log(self, message: str):
-        """Output log"""
+        """输出日志"""
         if self.trace_handler:
             self.trace_handler(message)
     def read_hex_file(self, hex_file_path: str) -> Tuple[Optional[bytes], Optional[int], Optional[int]]:
-        """Read hex file and extract data, start address and length
+        """Read hex file using IntelHex library
         
         Args:
             hex_file_path: Path to the hex file
@@ -51,39 +52,14 @@ class FlashingProcess:
                 self.log(f"Error: HEX file does not exist: {hex_file_path}")
                 return None, None, None
                 
-            data_segments = []
-            start_addr = None
-            total_length = 0
+            ih = intelhex.IntelHex(hex_file_path)
+            start_addr = ih.minaddr()
+            end_addr = ih.maxaddr()
+            total_length = end_addr - start_addr + 1
+            complete_data = ih.tobinarray(start=start_addr, size=total_length)
             
-            with open(hex_file_path, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if not line.startswith(':'):
-                        continue
-                        
-                    # Remove colon and convert to bytes
-                    record = bytes.fromhex(line[1:])
-                    
-                    # Parse record
-                    length = record[0]
-                    addr = (record[1] << 8) | record[2]
-                    record_type = record[3]
-                    data = record[4:-1]  # Exclude checksum
-                    
-                    if record_type == 0x00:  # Data record
-                        if start_addr is None:
-                            start_addr = addr
-                        data_segments.append(data)
-                        total_length += len(data)
-                        
-            if data_segments:
-                # Combine all data segments
-                complete_data = b''.join(data_segments)
-                self.log(f"Successfully read HEX file. Start address: 0x{start_addr:04X}, Length: {total_length} bytes")
-                return complete_data, start_addr, total_length
-            else:
-                self.log("Error: No valid data found in HEX file")
-                return None, None, None
+            self.log(f"Successfully read HEX file. Start address: 0x{start_addr:04X}, Length: {total_length} bytes")
+            return bytes(complete_data), start_addr, total_length
                 
         except Exception as e:
             self.log(f"Error reading HEX file: {str(e)}")

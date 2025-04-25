@@ -25,8 +25,3 @@ class SecurityKeyAlgorithm:
             temp_key ^= keyk
             temp_key &= 0xFFFFFFFF
         return temp_key
-
-    @staticmethod
-    def hex_str_to_int(hex_str: str) -> int:
-        """将十六进制字符串转换为整数"""
-        return int(hex_str.replace(' ', ''), 16)
