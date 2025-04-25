@@ -118,7 +118,6 @@ class FlashingProcess:
                 seed = response.data[1:5]  # Extract correct 4 bytes
                 self.log(f"Successfully got seed (length {len(seed)}): {seed.hex().upper()}")
                 
-                from algo_27 import SecurityKeyAlgorithm
                 seed_int = int.from_bytes(seed, byteorder='big')  # Convert bytes type seed to integer
                 computed_key = SecurityKeyAlgorithm.compute_level4(
                     seed=seed_int, 
@@ -536,3 +535,52 @@ class FlashingProcess:
             
         except Exception as e:
             self.log(f"Flashing sequence exception terminated: {str(e)}")
+    
+class SecurityKeyAlgorithm:
+    SECURITY_KKEY_L2 = 0x0000CDCA  # Level2算法密钥
+    SECURITY_KKEY_L4 = 0x00001D5C  # Level4算法密钥
+
+    @staticmethod
+    def compute_level2(seed: int, keyk: int) -> int:
+        temp_key = (seed ^ keyk) & 0xFFFFFFFF
+        for _ in range(32):
+            if temp_key & 0x00000001:
+                temp_key = (temp_key >> 1) ^ seed
+            else:
+                temp_key = (temp_key >> 1) ^ keyk
+            temp_key &= 0xFFFFFFFF 
+        return temp_key
+
+    @staticmethod
+    def compute_level4(seed: int, keyk: int) -> int:
+        temp_key = (seed ^ keyk) & 0xFFFFFFFF
+        for _ in range(32):
+            temp_key = ((temp_key << 7) | (temp_key >> 25)) & 0xFFFFFFFF
+            temp_key ^= keyk
+            temp_key &= 0xFFFFFFFF
+        return temp_key
+
+
+class SecurityKeyAlgorithmUP:
+    SECURITY_KKEY_L2 = 0x0000CDCA  # Level2算法密钥
+    SECURITY_KKEY_L4 = 0x00001D5C  # Level4算法密钥
+
+    @staticmethod
+    def compute_level2(seed: int, keyk: int) -> int:
+        temp_key = (seed ^ keyk) & 0xFFFFFFFF
+        for _ in range(32):
+            if temp_key & 0x00000001:
+                temp_key = (temp_key >> 1) ^ seed
+            else:
+                temp_key = (temp_key >> 1) ^ keyk
+            temp_key &= 0xFFFFFFFF 
+        return temp_key
+
+    @staticmethod
+    def compute_level4(seed: int, keyk: int) -> int:
+        temp_key = (seed ^ keyk) & 0xFFFFFFFF
+        for _ in range(32):
+            temp_key = ((temp_key << 7) | (temp_key >> 25)) & 0xFFFFFFFF
+            temp_key ^= keyk
+            temp_key &= 0xFFFFFFFF
+        return temp_key
