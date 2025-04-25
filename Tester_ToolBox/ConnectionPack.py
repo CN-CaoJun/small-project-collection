@@ -95,6 +95,28 @@ class ConnectionPack:
             self.channel_configs.clear()
             channel_list = []
 
+            # Scan SocketCAN interfaces on Linux
+            try:
+                import os
+                import platform
+                if platform.system() != 'Linux':
+                    return
+                print("Scanning SocketCAN interfaces...")
+                # 检查网络接口目录
+                net_path = "/sys/class/net"
+                if os.path.exists(net_path):
+                    for name in os.listdir(net_path):
+                        if name.startswith(('can', 'vcan', 'slcan')):
+                            channel_name = f"SocketCAN: {name}"
+                            channel_list.append(channel_name)
+                            self.channel_configs[channel_name] = {
+                                'type': 'socketcan',
+                                'channel': name
+                            }
+                            print(f"Found SocketCAN interface: {name}")
+            except Exception as e:
+                print(f"SocketCAN scan error: {str(e)}")
+
             # Scan Vector devices
             if canlib.xldriver is not None:
                 try:
@@ -263,6 +285,14 @@ class ConnectionPack:
                 self.can_bus = slcanBus(
                     channel=channel_config['port'],
                     bitrate = 500000,
+                )
+            elif channel_config['type'] == 'socketcan':
+                print(f"channel_config['channel']: {channel_config['channel']}")
+                self.can_bus = can.Bus(
+                    interface='socketcan',
+                    channel=channel_config['channel'],
+                    bitrate = 500000,
+                    fd = False,
                 )
             # Disable all controls in connection frame
             self.hardware_combo.configure(state='disabled')
