@@ -33,7 +33,7 @@ class BootloaderPack:
         try:
             # Get CAN bus object from main window
             main_window = self.parent.winfo_toplevel()
-            can_bus = main_window.connection.get_can_bus()
+            can_bus ,isfd = main_window.connection.get_can_bus()
             
             if not can_bus:
                 if self.ensure_trace_handler():
@@ -41,22 +41,46 @@ class BootloaderPack:
                 return False
                 
             # Configure ISO-TP parameters
-            isotp_params = {
-                'stmin': 10,
-                'blocksize': 8,
-                'wftmax': 0,
-                'tx_data_length': 8,
-                'tx_data_min_length': None,
-                'tx_padding': 0,
-                'rx_flowcontrol_timeout': 2000,    # Increased to 2000ms
-                'rx_consecutive_frame_timeout': 2000,  # Increased to 2000ms
-                'override_receiver_stmin': None,
-                'max_frame_size': 4095,
-                'can_fd': False,
-                'bitrate_switch': False,
-                'rate_limit_enable': False,
-                'listen_mode': False
-            }
+            if isfd:
+                isotp_params = {
+                    'stmin': 10,
+                    'blocksize': 8,
+                    'tx_padding': 0x00,
+                    'override_receiver_stmin': None,
+                    'wftmax': 4,
+                    'tx_data_length': 64,
+                    'tx_data_min_length':8,
+                    'rx_flowcontrol_timeout': 1000,
+                    'rx_consecutive_frame_timeout': 100,
+                    'can_fd': True,
+                    'max_frame_size': 4095,
+                    'bitrate_switch': False,
+                    'rate_limit_enable': False,
+                    'listen_mode': False,
+                    'blocking_send': False
+                }
+                if self.ensure_trace_handler():
+                    self.trace_handler("Using CAN-FD ISO-TP parameters")
+            else:
+                isotp_params = {
+                    'stmin': 10,
+                    'blocksize': 8,
+                    'tx_padding': 0x00,
+                    'override_receiver_stmin': None,
+                    'wftmax': 4,
+                    'tx_data_length': 8,
+                    'tx_data_min_length':8,
+                    'rx_flowcontrol_timeout': 1000,
+                    'rx_consecutive_frame_timeout': 100,
+                    'can_fd': False,
+                    'max_frame_size': 4095,
+                    'bitrate_switch': False,
+                    'rate_limit_enable': False,
+                    'listen_mode': False,
+                    'blocking_send': False  
+                }
+                if self.ensure_trace_handler():
+                    self.trace_handler("Using Standard CAN ISO-TP parameters")
             
             # Create notifier
             self.notifier = can.Notifier(can_bus, [])
@@ -186,7 +210,7 @@ class BootloaderPack:
             # Close UDS client
             self.close_uds_connection()
             self.init_uds_btn.config(text="Init UDS Client")
-            self.uds_status_label.config(text="UDS Client: Not Connected", foreground="black")
+            self.uds_status_label.config(text="UDS Client: Offline", foreground="black")
 
     def start_tester_present_thread(self):
         self.tester_present_running = True
@@ -205,9 +229,11 @@ class BootloaderPack:
                     with self.uds_client as client:
                         client.conn.send(bytes.fromhex('3E 00'))
                         response = client.conn.wait_frame(timeout=0.5)
-                        if response:
-                            if self.ensure_trace_handler():
-                                self.trace_handler(f"TesterPresent response: {response.hex().upper()}")
+                        if response and response.hex().upper() == '7E00':
+                            self.uds_status_label.config(text="UDS Client: Online", foreground="green")
+                            
+                            # if self.ensure_trace_handler():
+                            #     self.trace_handler(f"TesterPresent response: {response.hex().upper()}")
                         if response and response.hex().upper() != '7E00':
                             if self.ensure_trace_handler():
                                 self.trace_handler(f"Unexpected TesterPresent response: {response.hex().upper()}")
