@@ -15,6 +15,7 @@ from can.interfaces.vector import canlib, xlclass, xldefine
 from datetime import datetime
 import threading
 import time
+from ecu_config import ECUMapReader
 
 class DiagnosticPack:
     def __init__(self, parent):
@@ -22,6 +23,7 @@ class DiagnosticPack:
         self.receive_active = False  # Flag to control receive thread
         self.receive_thread = None   # Receive thread object
         self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
+        self.ecu_map_reader = ECUMapReader()
         self.create_widgets()
         
     def create_widgets(self):
@@ -33,26 +35,42 @@ class DiagnosticPack:
         self.params_container = ttk.Frame(self.tp_params_frame)
         self.params_container.pack(fill=tk.X, padx=5, pady=2)
         
-        # TXID settings
+        self.ecu_frame = ttk.Frame(self.params_container)
+        self.ecu_frame.pack(side=tk.LEFT)
+        ttk.Label(self.ecu_frame, text="ECU:").pack(anchor=tk.W)
+        self.ecu_var = tk.StringVar()
+        self.ecu_combobox = ttk.Combobox(self.ecu_frame, textvariable=self.ecu_var, width=15, state='readonly')
+        ecu_list = list(self.ecu_map_reader.get_read_ecu_map().keys())
+        self.ecu_combobox['values'] = ecu_list
+        self.ecu_combobox.bind('<<ComboboxSelected>>', self.on_ecu_selected)
+        self.ecu_combobox.pack()
+        
+        ttk.Frame(self.params_container, width=10).pack(side=tk.LEFT)
+        
+        # TXID显示
         self.txid_frame = ttk.Frame(self.params_container)
         self.txid_frame.pack(side=tk.LEFT)
-        ttk.Label(self.txid_frame, text="TXID:").pack(anchor=tk.W)  # Use anchor=tk.W for left alignment
-        self.txid_entry = ttk.Entry(self.txid_frame, width=8)
-        self.txid_entry.insert(0, "0x749")
-        self.txid_entry.pack()
+        ttk.Label(self.txid_frame, text="TXID:").pack(anchor=tk.W)
+        self.txid_var = tk.StringVar()
+        self.txid_label = ttk.Label(self.txid_frame, textvariable=self.txid_var, width=8, foreground='green')
+        self.txid_label.pack()
         
         # Add 10 pixel spacing
         ttk.Frame(self.params_container, width=10).pack(side=tk.LEFT)
         
-        # RXID settings
+        # RXID显示
         self.rxid_frame = ttk.Frame(self.params_container)
         self.rxid_frame.pack(side=tk.LEFT)
-        ttk.Label(self.rxid_frame, text="RXID:").pack(anchor=tk.W)  # Use anchor=tk.W for left alignment
-        self.rxid_entry = ttk.Entry(self.rxid_frame, width=8)
-        self.rxid_entry.insert(0, "0x759")
-        self.rxid_entry.pack()
+        ttk.Label(self.rxid_frame, text="RXID:").pack(anchor=tk.W)
+        self.rxid_var = tk.StringVar()
+        self.rxid_label = ttk.Label(self.rxid_frame, textvariable=self.rxid_var, width=8, foreground='green')
+        self.rxid_label.pack()
         
         ttk.Frame(self.params_container, width=10).pack(side=tk.LEFT)
+        
+        if ecu_list:
+            self.ecu_combobox.set(ecu_list[0])
+            self.on_ecu_selected(None)  
         
         # STMIN settings
         self.stmin_frame = ttk.Frame(self.params_container)
@@ -165,6 +183,14 @@ class DiagnosticPack:
             self.release_tp_layer()
             self.send_button.configure(state='disabled')
             
+    def on_ecu_selected(self, event):
+        """当选择ECU时更新TXID和RXID显示"""
+        selected_ecu = self.ecu_var.get()
+        ecu_config = self.ecu_map_reader.get_ecu_ids(selected_ecu)
+        if ecu_config:
+            self.txid_var.set(ecu_config['TXID'])
+            self.rxid_var.set(ecu_config['RXID'])
+            
     def initialize_tp_layer(self):
         """Initialize ISO-TP layer"""
         try:
@@ -182,9 +208,17 @@ class DiagnosticPack:
             blocksize = int(self.block_entry.get(), 16)
             padding = int(self.padding_entry.get(), 16)
             
-            # Get IDs
-            txid = int(self.txid_entry.get(), 16)
-            rxid = int(self.rxid_entry.get(), 16)
+            # 获取当前选中的ECU配置
+            selected_ecu = self.ecu_var.get()
+            ecu_config = self.ecu_map_reader.get_ecu_ids(selected_ecu)
+            if not ecu_config:
+                if self.ensure_trace_handler():
+                    self.trace_handler("ERROR: No ECU configuration selected")
+                return
+                
+            # 获取IDs
+            txid = int(ecu_config['TXID'], 16)
+            rxid = int(ecu_config['RXID'], 16)
             
             # Create ISO-TP address
             tp_addr = isotp.Address(isotp.AddressingMode.Normal_11bits, txid=txid, rxid=rxid)
