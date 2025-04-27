@@ -100,20 +100,18 @@ class ConnectionPack:
                 import os
                 import platform
                 if platform.system() != 'Linux':
-                    return
-                print("Scanning SocketCAN interfaces...")
-                # 检查网络接口目录
-                net_path = "/sys/class/net"
-                if os.path.exists(net_path):
-                    for name in os.listdir(net_path):
-                        if name.startswith(('can', 'vcan', 'slcan')):
-                            channel_name = f"SocketCAN: {name}"
-                            channel_list.append(channel_name)
-                            self.channel_configs[channel_name] = {
-                                'type': 'socketcan',
-                                'channel': name
-                            }
-                            print(f"Found SocketCAN interface: {name}")
+                    print("Scanning SocketCAN interfaces...")
+                    net_path = "/sys/class/net"
+                    if os.path.exists(net_path):
+                        for name in os.listdir(net_path):
+                            if name.startswith(('can', 'vcan', 'slcan')):
+                                channel_name = f"SocketCAN: {name}"
+                                channel_list.append(channel_name)
+                                self.channel_configs[channel_name] = {
+                                    'type': 'socketcan',
+                                    'channel': name
+                                }
+                                print(f"Found SocketCAN interface: {name}")
             except Exception as e:
                 print(f"SocketCAN scan error: {str(e)}")
 
