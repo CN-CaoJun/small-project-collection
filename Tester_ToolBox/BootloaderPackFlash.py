@@ -23,6 +23,7 @@ import udsoncan.configs
 # from udsoncan import MemoryLocation
 from typing import Optional, List, Union, Tuple
 from udsoncan import Response
+from udsoncan import MemoryLocation
 
 class FlashingProcess:
     def __init__(self, uds_client: Client, trace_handler=None):
@@ -30,6 +31,14 @@ class FlashingProcess:
         self.trace_handler = trace_handler
         self.firmware_folder = None
         
+        # 添加文件路径和解析结果存储
+        self.sbl_data = None
+        self.sbl_start_addr = None
+        self.sbl_data_length = None
+        self.app_data = None
+        self.app_start_addr = None 
+        self.app_data_length = None
+
     def log(self, message: str):
         """输出日志"""
         if self.trace_handler:
@@ -141,7 +150,7 @@ class FlashingProcess:
                 data = bytes.fromhex('40 04 13 00 00 00 03 00 00 00 00 00 00 00 00')
                 response = client.write_data_by_identifier(did=0xF15A, value=data)
                 
-                if response.positive == True:
+                if response and response.positive:
                     return True
                 else:
                     return False
@@ -149,45 +158,54 @@ class FlashingProcess:
             self.log(f"Write F15A identifier exception: {str(e)}")
             return False
             
-    def request_download(self) -> bool:
-        """Step 7: Request download"""
-        self.log("Step: Request download")
+    def request_download(self, download_type: str = 'sbl') -> bool:
+        """Step 7: 统一下载请求函数"""
+        self.log(f"Step: Request {download_type.upper()} download")
         try:
             with self.client as client:
-                # Use raw send method
-                request = bytes.fromhex('34 00 44 20 00 00 00 00 00 05 80')
-                client.conn.send(request)
-                response = client.conn.wait_frame(timeout=5)
+                # 根据类型选择参数源
+                if download_type.lower() == 'sbl':
+                    addr = self.sbl_start_addr
+                    size = self.sbl_data_length
+                elif download_type.lower() == 'app':
+                    addr = self.app_start_addr
+                    size = self.app_data_length
+                else:
+                    self.log(f"Invalid download type: {download_type}")
+                    return False
+
+                memory_location = MemoryLocation(
+                    address=addr,
+                    memorysize=size,
+                    address_format=32,
+                    memorysize_format=32
+                )
                 
-                if response and response.hex().upper().startswith('74'):
-                    self.log(f"Download request successful, response: {response.hex().upper()}")
+                response = client.request_download(
+                    memory_location=memory_location
+                )
+                
+                if response and response.positive:
+                    self.log(f"{download_type.upper()} download request successful, response: {response.get_payload().hex().upper()}")
                     return True
                 else:
-                    self.log(f"Download request failed, response: {response.hex().upper() if response else 'None'}")
+                    self.log(f"{download_type.upper()} download request failed, response: {response.get_payload().hex().upper() if response else 'None'}")
                     return False
         except Exception as e:
-            self.log(f"Download request exception: {str(e)}")
+            self.log(f"{download_type.upper()} download request exception: {str(e)}")
             return False
             
     def transfer_hex_data(self) -> bool:
-        """Step 8: Transfer HEX file data"""
         self.log("Step: Transfer HEX file data")
         try:
-            if not self.firmware_folder:
-                self.log("Error: Firmware folder path not set")
+            if not self.sbl_data:
+                self.log("SBL data not initialized")
                 return False
                 
-            hex_file_path = os.path.join(self.firmware_folder, 'gen6nu_sbl.hex')
-            if not os.path.exists(hex_file_path):
-                self.log(f"Error: HEX file does not exist: {hex_file_path}")
-                return False
+            hex_data = self.sbl_data
+            start_addr = self.sbl_start_addr
+            data_length = self.sbl_data_length
             
-            # Use read_hex_file method to read data
-            hex_data, start_addr, data_length = self.read_hex_file(hex_file_path)
-            if hex_data is None:
-                self.log("Failed to read HEX file")
-                return False
-                
             self.log(f"HEX file parse result: Start address=0x{start_addr:04X}, Data length=0x{data_length:04X} bytes")
             
             with self.client as client:
@@ -318,24 +336,16 @@ class FlashingProcess:
             return False
 
     def transfer_app_data(self) -> bool:
-        """Step 13: Transfer application data"""
         self.log("Step: Transfer application data")
         try:
-            if not self.firmware_folder:
-                self.log("Error: Firmware folder path not set")
+            if not self.app_data:
+                self.log("APP data not initialized")
                 return False
                 
-            hex_file_path = os.path.join(self.firmware_folder, 'gen6nu.hex')
-            if not os.path.exists(hex_file_path):
-                self.log(f"Error: HEX file does not exist: {hex_file_path}")
-                return False
+            hex_data = self.app_data
+            start_addr = self.app_start_addr
+            data_length = self.app_data_length
             
-            # Use read_hex_file method to read data
-            hex_data, start_addr, data_length = self.read_hex_file(hex_file_path)
-            if hex_data is None:
-                self.log("Failed to read HEX file")
-                return False
-                
             self.log(f"HEX file parse result: Start address=0x{start_addr:04X}, Data length=0x{data_length:04X} bytes")
             
             with self.client as client:
@@ -488,6 +498,21 @@ class FlashingProcess:
         self.firmware_folder = firmware_folder
         self.log("Start executing flashing sequence...")
         
+        sbl_path = os.path.join(firmware_folder, 'gen6nu_sbl.hex')
+        app_path = os.path.join(firmware_folder, 'gen6nu.hex')
+        
+        # 读取SBL文件
+        self.sbl_data, self.sbl_start_addr, self.sbl_data_length = self.read_hex_file(sbl_path)
+        if not self.sbl_data:
+            self.log("Failed to read SBL HEX file")
+            return False
+            
+        # 读取APP文件
+        self.app_data, self.app_start_addr, self.app_data_length = self.read_hex_file(app_path) 
+        if not self.app_data:
+            self.log("Failed to read APP HEX file")
+            return False
+        
         try:
             steps = [
                 lambda: self.change_session(0x03),                                # Step 1: Switch to extended diagnostic session
@@ -495,12 +520,12 @@ class FlashingProcess:
                 lambda: self.change_session(0x02),                                # Step 3: Switch to programming session
                 self.security_access,                                             # Step 4-5: Security access
                 self.write_f15a_identifier,                                       # Step 6: Write F15A identifier
-                self.request_download,                                            # Step 7: Request download
+                lambda:self.request_download('sbl'),                              # Step 7: Request download
                 self.transfer_hex_data,                                           # Step 8: Transfer HEX data
                 self.exit_transfer,                                               # Step 9: Exit transfer
                 lambda: self.transfer_signature(os.path.join(firmware_folder, 'gen6nu_sbl_sign.bin')),  # Step 10: Transfer signature
                 self.erase_memory,                                               # Step 11: Enter Flash mode
-                self.request_app_download,                                        # Step 12: Request download application
+                lambda:self.request_download('app'),                             # Step 12: Request download application
                 self.transfer_app_data,                                          # Step 13: Transfer application data
                 self.exit_transfer,                                              # Step 14: Exit transfer
                 self.verify_app_signature,                                       # Step 15: Verify application signature

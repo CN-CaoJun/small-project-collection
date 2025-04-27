@@ -242,7 +242,7 @@ class BootloaderPack:
             except Exception as e:
                 if self.ensure_trace_handler():
                     self.trace_handler(f"TesterPresent error: {str(e)}")
-            time.sleep(2)
+            time.sleep(3.5)
     
     def perform_ecu_reset(self):
         """Execute ECU reset"""
