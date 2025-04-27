@@ -15,25 +15,29 @@ class ECUMapReader:
         self.load_ecu_map()
     
     def load_ecu_map(self):
-        """从JSON文件加载ECU映射配置到READ_ECU_MAP"""
+        """Load ECU mapping configuration from JSON file to READ_ECU_MAP"""
         try:
             if os.path.exists(self.config_file):
                 with open(self.config_file, 'r') as f:
                     config_data = json.load(f)
-                    # 清空现有的READ_ECU_MAP
+                    # Clear existing READ_ECU_MAP
                     READ_ECU_MAP.clear()
-                    # 更新READ_ECU_MAP
+                    # Update READ_ECU_MAP
                     READ_ECU_MAP.update(config_data)
                     return True
             return False
         except Exception as e:
-            print(f"读取ECU映射配置失败: {str(e)}")
+            print(f"Failed to read ECU mapping configuration: {str(e)}")
             return False
     
     def get_read_ecu_map(self):
-        """获取当前READ_ECU_MAP"""
+        """Get current READ_ECU_MAP"""
         return READ_ECU_MAP
     
     def get_ecu_ids(self, ecu_name):
-        """获取指定ECU的ID配置"""
+        """
+        Get ID configuration for specified ECU
+        :param ecu_name: ECU name
+        :return: ID configuration dictionary or None
+        """
         return READ_ECU_MAP.get(ecu_name, None)
