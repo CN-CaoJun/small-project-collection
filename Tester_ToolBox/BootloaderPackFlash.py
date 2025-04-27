@@ -85,17 +85,13 @@ class FlashingProcess:
         self.log("Step: Enter extended session")
         try:
             with self.client as client:
-                # Use raw send method
-                request = bytes.fromhex('31 01 D0 03')
-                client.conn.send(request)
-                response = client.conn.wait_frame(timeout=3)
-                # Print response content
-                self.log(f"Response content: {response.hex().upper() if response else 'None'}")
-                if response and response.hex().upper().startswith('7101D00300'):
+                response = client.routine_control(routine_id=0xD003, control_type=0x01)
+                self.log(f"Response content: {response.data.hex().upper() if response else 'None'}")
+                if response and response.data.hex().upper().startswith('01D00300'):
                     self.log("Extended session successful")
                     return True
                 else:
-                    self.log(f"Extended session failed, response: {response.hex().upper() if response else 'None'}")
+                    self.log(f"Extended session failed, response: {response.data.hex().upper() if response else 'None'}")
                     return False
         except Exception as e:
             self.log(f"Extended session exception: {str(e)}")

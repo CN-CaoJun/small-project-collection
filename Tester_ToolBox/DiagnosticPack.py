@@ -150,12 +150,7 @@ class DiagnosticPack:
         self.send_button = ttk.Button(self.input_container, text="Send", command=self.send_message)
         self.send_button.pack(side=tk.LEFT)
         self.send_button.configure(state='disabled')  # Initial state set to disabled
-        
-        # Message display box
-        # Comment or delete message display box creation code
-        # self.msg_display = tk.Text(self.msg_frame, height=10)
-        # self.msg_display.pack(fill=tk.BOTH, padx=5, pady=2)
-        
+
         # Add ISO-TP stack property
         self.tp_stack = None
         
@@ -184,7 +179,7 @@ class DiagnosticPack:
             self.send_button.configure(state='disabled')
             
     def on_ecu_selected(self, event):
-        """当选择ECU时更新TXID和RXID显示"""
+        """update the value of TXID and RXID"""
         selected_ecu = self.ecu_var.get()
         ecu_config = self.ecu_map_reader.get_ecu_ids(selected_ecu)
         if ecu_config:
@@ -208,7 +203,7 @@ class DiagnosticPack:
             blocksize = int(self.block_entry.get(), 16)
             padding = int(self.padding_entry.get(), 16)
             
-            # 获取当前选中的ECU配置
+            # get the selected ECU from the dropdown menu
             selected_ecu = self.ecu_var.get()
             ecu_config = self.ecu_map_reader.get_ecu_ids(selected_ecu)
             if not ecu_config:
