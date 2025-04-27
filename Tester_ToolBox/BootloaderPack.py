@@ -106,7 +106,9 @@ class BootloaderPack:
             # Configure UDS client
             uds_config = udsoncan.configs.default_client_config.copy()
             uds_config['data_identifiers'] = {
-                'default' : '>H',                     
+                'default': '>H',
+                0x7705: FlexRawData(30),
+                0xF15A: FlexRawData(15),
             }
             # Modify timeout configuration
             uds_config['p2_timeout'] = 5  # Increased to 2 seconds
@@ -310,7 +312,16 @@ class BootloaderPack:
                 self.trace_handler(f"Error handling exception: {str(e)}")
 
     def get_version(self):
-        """Get ECU version number"""
+        """Get ECU version number using UDS read data by identifier service
+        
+        This method reads DID 0x7705 which contains:
+        - Version information (10 bytes)
+        - Date information (12 bytes)
+        - Time information (8 bytes)
+        
+        Returns:
+            bool: True if version information was successfully retrieved, False otherwise
+        """
         try:
             if not self.uds_client:
                 if self.ensure_trace_handler():
@@ -318,39 +329,40 @@ class BootloaderPack:
                 return False
                 
             with self.uds_client as client:
-                # Send raw 22 77 05 request
-                request = bytes.fromhex('22 77 05')
-                client.conn.send(request)
-                response = client.conn.wait_frame(timeout=3)
+                # Read DID 0x7705 using UDS service
+                response = client.read_data_by_identifier(0x7705)
                 
-                if response and response.hex().upper().startswith('627705'):
-                    # Parse complete data structure: 62 77 05 [10 bytes version] [12 bytes date] [8 bytes time]
-                    version_data = response[3:13]   # 10 bytes version info
-                    date_data = response[13:25]     # 12 bytes date data
-                    time_data = response[25:33]     # 8 bytes time data
+                if response and response.service_data.values:
+                    # Get raw data from response
+                    data = response.service_data.values[0x7705]
                     
-                    # Convert version information
+                    # Parse data structure: [10 bytes version] [12 bytes date] [8 bytes time]
+                    version_data = data[0:10]    # Version info (10 bytes)
+                    date_data = data[10:22]      # Date data (12 bytes)
+                    time_data = data[22:30]      # Time data (8 bytes)
+                    
+                    # Convert version information to ASCII string
                     version_str = version_data.decode('ascii', errors='ignore').strip()
                     
-                    # Convert date information (assuming ASCII format)
+                    # Try to convert date information
                     try:
                         date_str = date_data.decode('ascii', errors='ignore').strip()
                     except:
                         date_str = "Date parsing failed"
                         
-                    # Convert time information (assuming ASCII format)
+                    # Try to convert time information
                     try:
                         time_str = time_data.decode('ascii', errors='ignore').strip()
                     except:
                         time_str = "Time parsing failed"
                     
-                    # Update version information label
+                    # Update version information label in UI
                     self.version_label.config(
                         text=f"Ver: {version_str}",
                         foreground="green"
                     )
                     
-                    # Log to tracehandler
+                    # Log complete version information to trace handler
                     if self.ensure_trace_handler():
                         log_msg = (
                             f"Complete version information:\n"
@@ -361,7 +373,8 @@ class BootloaderPack:
                         self.trace_handler(log_msg)
                     return True
                 else:
-                    err_msg = f"Failed to get version, response: {response.hex().upper() if response else 'No response'}"
+                    # Handle failed response
+                    err_msg = "Failed to get version information"
                     self.version_label.config(
                         text=err_msg,
                         foreground="red"
@@ -371,6 +384,7 @@ class BootloaderPack:
                     return False
                     
         except Exception as e:
+            # Handle any exceptions during version retrieval
             err_msg = f"Version retrieval exception: {str(e)}"
             self.version_label.config(
                 text=err_msg,
@@ -468,3 +482,22 @@ class BootloaderPack:
             foreground="gray"
         )
         self.version_label.pack(side=tk.LEFT, padx=(10, 0))
+
+class FlexRawData(udsoncan.DidCodec):
+    def __init__(self, length: int):
+        self.data_length = length
+    def encode(self, val):
+        if not isinstance(val, (bytes, bytearray)):
+            raise ValueError("Input data must be bytes or bytearray type")
+        
+        if len(val) != self.data_length:
+            raise ValueError('Data length must be 30 bytes')
+            
+        return val  # Return raw data directly
+    def decode(self, payload):
+        if len(payload) != self.data_length:
+            raise ValueError('Received data length must be 30 bytes')
+            
+        return payload  # Return raw data directly
+    def __len__(self):
+        return self.data_length

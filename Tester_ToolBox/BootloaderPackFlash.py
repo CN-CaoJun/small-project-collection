@@ -138,23 +138,12 @@ class FlashingProcess:
         self.log("Step: Write F15A identifier")
         try:
             with self.client as client:
-                # Use raw send method
-                data = bytes.fromhex('2E F1 5A 40 04 13 00 00 00 03 00 00 00 00 00 00 00 00')
-                client.conn.send(data)
+                data = bytes.fromhex('40 04 13 00 00 00 03 00 00 00 00 00 00 00 00')
+                response = client.write_data_by_identifier(did=0xF15A, value=data)
                 
-                # Wait for intermediate response (7F 2E 78)
-                response = client.conn.wait_frame(timeout=3)
-                if not response or response.hex().upper() != '7F2E78':
-                    self.log(f"Did not receive expected intermediate response, received: {response.hex().upper() if response else 'None'}")
-                    return False
-                    
-                # Wait for final response (6E F1 5A)
-                final_response = client.conn.wait_frame(timeout=5)
-                if final_response and final_response.hex().upper() == '6EF15A':
-                    self.log("Write F15A identifier successful")
+                if response.positive == True:
                     return True
                 else:
-                    self.log(f"Write F15A identifier failed, response: {final_response.hex().upper() if final_response else 'None'}")
                     return False
         except Exception as e:
             self.log(f"Write F15A identifier exception: {str(e)}")
