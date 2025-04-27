@@ -115,6 +115,8 @@ class DiagnosticPack:
         self.msg_input = ttk.Entry(self.input_container, validate="key", 
                                  validatecommand=(self.parent.register(self.on_hex_input), '%P'))
         self.msg_input.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        # 添加回车键绑定
+        self.msg_input.bind('<Return>', lambda event: self.send_message())
         
         ttk.Label(self.input_container, text="(Hex: 11 22 33)").pack(side=tk.LEFT)
         # Add keep alive button
