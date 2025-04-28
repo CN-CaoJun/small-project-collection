@@ -6,7 +6,7 @@ DEFAULT_ECU_MAP = {
 }
 
 READ_ECU_MAP = {
-    
+    'None': {'RXID': 0x759, 'TXID': 0x749}
 }
 
 class ECUMapReader:

@@ -272,20 +272,32 @@ class FlashingProcess:
                 request = header + bin_data
                 client.conn.send(request)
                 
-                # Wait for intermediate response (7F 31 78)
+                # Wait for response
                 response = client.conn.wait_frame(timeout=3)
-                if not response or response.hex().upper() != '7F3178':
-                    self.log(f"Did not receive expected intermediate response, received: {response.hex().upper() if response else 'None'}")
+                if not response:
+                    self.log("No response received")
                     return False
                     
-                # Wait for final response (71 01 D0 02 00)
-                final_response = client.conn.wait_frame(timeout=5)
-                if final_response and final_response.hex().upper() == '7101D00200':
+                # 检查是否直接收到正响应
+                if response.hex().upper() == '7101D00200':
                     self.log("Signature verification successful")
                     return True
-                else:
-                    self.log(f"Signature verification failed, response: {final_response.hex().upper() if final_response else 'None'}")
-                    return False
+                    
+                # 如果收到中间响应，则继续等待最终响应
+                if response.hex().upper() == '7F3178':
+                    self.log("Received intermediate response, waiting for final response...")
+                    final_response = client.conn.wait_frame(timeout=5)
+                    if final_response and final_response.hex().upper() == '7101D00200':
+                        self.log("Signature verification successful")
+                        return True
+                    else:
+                        self.log(f"Signature verification failed, response: {final_response.hex().upper() if final_response else 'None'}")
+                        return False
+                
+                # 如果既不是正响应也不是中间响应，则验证失败
+                self.log(f"Unexpected response received: {response.hex().upper()}")
+                return False
+            
         except Exception as e:
             self.log(f"Signature transfer exception: {str(e)}")
             return False
@@ -297,21 +309,32 @@ class FlashingProcess:
             with self.client as client:
                 request = bytes.fromhex('31 01 FF 00 44 00 00 00 00 00 02 E0 00')
                 client.conn.send(request)
-                
-                # Wait for intermediate response (7F 31 78)
+                # Wait for response
                 response = client.conn.wait_frame(timeout=3)
-                if not response or response.hex().upper() != '7F3178':
-                    self.log(f"Did not receive expected intermediate response, received: {response.hex().upper() if response else 'None'}")
+                if not response:
+                    self.log("No response received")
                     return False
                     
-                # Wait for final response (71 01 FF 00 00)
-                final_response = client.conn.wait_frame(timeout=5)
-                if final_response and final_response.hex().upper() == '7101FF0000':
-                    self.log("Enter Flash mode successful")
+                # 检查是否直接收到正响应
+                if response.hex().upper() == '7101FF0000':
+                    self.log("Signature verification successful")
                     return True
-                else:
-                    self.log(f"Enter Flash mode failed, response: {final_response.hex().upper() if final_response else 'None'}")
-                    return False
+                    
+                # 如果收到中间响应，则继续等待最终响应
+                if response.hex().upper() == '7F3178':
+                    self.log("Received intermediate response, waiting for final response...")
+                    final_response = client.conn.wait_frame(timeout=5)
+                    if final_response and final_response.hex().upper() == '7101FF0000':
+                        self.log("Signature verification successful")
+                        return True
+                    else:
+                        self.log(f"Signature verification failed, response: {final_response.hex().upper() if final_response else 'None'}")
+                        return False
+                
+                # 如果既不是正响应也不是中间响应，则验证失败
+                self.log(f"Unexpected response received: {response.hex().upper()}")
+                return False
+            
         except Exception as e:
             self.log(f"Enter Flash mode exception: {str(e)}")
             return False
@@ -411,20 +434,31 @@ class FlashingProcess:
                 request = header + bin_data
                 client.conn.send(request)
                 
-                # Wait for intermediate response (7F 31 78)
+                # Wait for response
                 response = client.conn.wait_frame(timeout=3)
-                if not response or response.hex().upper() != '7F3178':
-                    self.log(f"Did not receive expected intermediate response, received: {response.hex().upper() if response else 'None'}")
+                if not response:
+                    self.log("No response received")
                     return False
                     
-                # Wait for final response (71 01 D0 02 00)
-                final_response = client.conn.wait_frame(timeout=5)
-                if final_response and final_response.hex().upper() == '7101D00200':
+                # 检查是否直接收到正响应
+                if response.hex().upper() == '7101D00200':
                     self.log("Signature verification successful")
                     return True
-                else:
-                    self.log(f"Signature verification failed, response: {final_response.hex().upper() if final_response else 'None'}")
-                    return False
+                    
+                # 如果收到中间响应，则继续等待最终响应
+                if response.hex().upper() == '7F3178':
+                    self.log("Received intermediate response, waiting for final response...")
+                    final_response = client.conn.wait_frame(timeout=5)
+                    if final_response and final_response.hex().upper() == '7101D00200':
+                        self.log("Signature verification successful")
+                        return True
+                    else:
+                        self.log(f"Signature verification failed, response: {final_response.hex().upper() if final_response else 'None'}")
+                        return False
+                
+                # 如果既不是正响应也不是中间响应，则验证失败
+                self.log(f"Unexpected response received: {response.hex().upper()}")
+                return False
         except Exception as e:
             self.log(f"Signature verification exception: {str(e)}")
             return False
@@ -437,20 +471,32 @@ class FlashingProcess:
                 request = bytes.fromhex('31 01 FF 01')
                 client.conn.send(request)
                 
-                # Wait for intermediate response (7F 31 78)
+                # Wait for response
                 response = client.conn.wait_frame(timeout=3)
-                if not response or response.hex().upper() != '7F3178':
-                    self.log(f"Did not receive expected intermediate response, received: {response.hex().upper() if response else 'None'}")
+                if not response:
+                    self.log("No response received")
                     return False
                     
-                # Wait for final response (71 01 FF 01 00)
-                final_response = client.conn.wait_frame(timeout=5)
-                if final_response and final_response.hex().upper() == '7101FF0100':
+                # 检查是否直接收到正响应
+                if response.hex().upper() == '7101FF0100':
                     self.log("Complete flash process successful")
                     return True
-                else:
-                    self.log(f"Complete flash process failed, response: {final_response.hex().upper() if final_response else 'None'}")
-                    return False
+                    
+                # 如果收到中间响应(78 pending或7F3178)，则继续等待最终响应
+                if response.hex().upper() in ['7F3178', '7F3178']:
+                    self.log("Received intermediate response, waiting for final response...")
+                    final_response = client.conn.wait_frame(timeout=5)
+                    if final_response and final_response.hex().upper() == '7101FF0100':
+                        self.log("Complete flash process successful")
+                        return True
+                    else:
+                        self.log(f"Complete flash process failed, response: {final_response.hex().upper() if final_response else 'None'}")
+                        return False
+                
+                # 如果既不是正响应也不是中间响应，则验证失败
+                self.log(f"Unexpected response received: {response.hex().upper()}")
+                return False
+            
         except Exception as e:
             self.log(f"Complete flash process exception: {str(e)}")
             return False

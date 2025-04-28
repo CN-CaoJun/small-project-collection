@@ -41,6 +41,7 @@ class DiagnosticPack:
         self.ecu_var = tk.StringVar()
         self.ecu_combobox = ttk.Combobox(self.ecu_frame, textvariable=self.ecu_var, width=15, state='readonly')
         ecu_list = list(self.ecu_map_reader.get_read_ecu_map().keys())
+        print(f"Available ECUs: {ecu_list}")  # 打印ECU列表
         self.ecu_combobox['values'] = ecu_list
         self.ecu_combobox.bind('<<ComboboxSelected>>', self.on_ecu_selected)
         self.ecu_combobox.pack()
