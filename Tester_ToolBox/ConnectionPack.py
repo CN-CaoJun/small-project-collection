@@ -120,6 +120,16 @@ class ConnectionPack:
                 try:
                     canlib.xldriver.xlOpenDriver()
                     vector_configs = canlib.get_channel_configs()
+                    
+                    # print("\nVector设备配置信息:")
+                    # for config in vector_configs:
+                    #     print(f"通道名称: {config.name}")
+                    #     print(f"硬件通道: {config.hw_channel}")
+                    #     print(f"硬件类型: {config.hw_type}")
+                    #     print(f"硬件索引: {config.hw_index}")
+                    #     print(f"通道掩码: {config.channel_mask}")
+                    #     print("------------------------")
+                    
                     for config in vector_configs:
                         channel_name = f"Vector: {config.name}"
                         channel_list.append(channel_name)

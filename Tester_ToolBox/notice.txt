@@ -1,0 +1,5 @@
+    when we init a uds client, however the p2 server timer sometime did not work even the target server response msg at time. 
+    temp replace 
+    response = self.send_request(request)
+    ->
+    response = self.send_request(request, timeout=3)

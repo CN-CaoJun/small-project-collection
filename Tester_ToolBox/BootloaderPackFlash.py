@@ -38,7 +38,8 @@ class FlashingProcess:
         self.app_data = None
         self.app_start_addr = None 
         self.app_data_length = None
-
+        
+        self.max_block_size = 0
     def log(self, message: str):
         """输出日志"""
         if self.trace_handler:
@@ -151,6 +152,7 @@ class FlashingProcess:
                 response = client.write_data_by_identifier(did=0xF15A, value=data)
                 
                 if response and response.positive:
+                    self.log("Has successfully written F15A identifier")
                     return True
                 else:
                     return False
@@ -159,11 +161,9 @@ class FlashingProcess:
             return False
             
     def request_download(self, download_type: str = 'sbl') -> bool:
-        """Step 7: 统一下载请求函数"""
         self.log(f"Step: Request {download_type.upper()} download")
         try:
             with self.client as client:
-                # 根据类型选择参数源
                 if download_type.lower() == 'sbl':
                     addr = self.sbl_start_addr
                     size = self.sbl_data_length
@@ -186,7 +186,14 @@ class FlashingProcess:
                 )
                 
                 if response and response.positive:
-                    self.log(f"{download_type.upper()} download request successful, response: {response.get_payload().hex().upper()}")
+                    response_data = response.get_payload()
+                    if len(response_data) >= 3:
+                        max_block_length = int.from_bytes(response_data[2:], byteorder='big')
+                        self.max_block_size = max_block_length - 2  
+                        self.log(f"{download_type.upper()} download request successful, max block size: {self.max_block_size}, response: {response_data.hex().upper()}")
+                    else:
+                        self = 0xFFA - 2
+                        self.log(f"{download_type.upper()} download request successful, using default block size: {self.max_block_size}")
                     return True
                 else:
                     self.log(f"{download_type.upper()} download request failed, response: {response.get_payload().hex().upper() if response else 'None'}")
@@ -195,63 +202,93 @@ class FlashingProcess:
             self.log(f"{download_type.upper()} download request exception: {str(e)}")
             return False
             
-    def transfer_hex_data(self) -> bool:
-        self.log("Step: Transfer HEX file data")
+    def transfer_hex_data(self, data_type: str = 'sbl') -> bool:
+        USE_UDS_TRANSFER = True
+        self.log(f"Step: Transfer {data_type.upper()} data")
         try:
-            if not self.sbl_data:
-                self.log("SBL data not initialized")
+            if data_type.lower() == 'sbl':
+                if not self.sbl_data:
+                    self.log("SBL data not initialized")
+                    return False
+                hex_data = self.sbl_data
+                start_addr = self.sbl_start_addr
+                data_length = self.sbl_data_length
+            elif data_type.lower() == 'app':
+                if not self.app_data:
+                    self.log("APP data not initialized")
+                    return False
+                hex_data = self.app_data
+                start_addr = self.app_start_addr
+                data_length = self.app_data_length
+            else:
+                self.log(f"Invalid data type: {data_type}")
                 return False
-                
-            hex_data = self.sbl_data
-            start_addr = self.sbl_start_addr
-            data_length = self.sbl_data_length
             
-            self.log(f"HEX file parse result: Start address=0x{start_addr:04X}, Data length=0x{data_length:04X} bytes")
+            self.log(f"Data transfer info - Type: {data_type.upper()}, Start address=0x{start_addr:04X}, Length=0x{data_length:04X} bytes")
             
             with self.client as client:
-                # Use raw send method instead of transfer_data
-                # Build 36 service request data: 36 + sequence number + data
-                sequence_number = 0x01  # Start with sequence number 1 for first transfer
-                request = bytes([0x36, sequence_number]) + hex_data
-                client.conn.send(request)
-                
-                # Wait for response, handle 78 pending case
-                response = client.conn.wait_frame(timeout=5)
-                
-                # Check if it's 78 pending response
-                while response and response.hex().upper() == '7F3678':
-                    self.log("Received 78 pending response, continue waiting...")
-                    # Wait for final response again
-                    response = client.conn.wait_frame(timeout=5)
-                
-                if response and response.hex().upper().startswith('76'):
-                    self.log(f"Data transfer successful, response: {response.hex().upper()}")
-                    return True
-                else:
-                    self.log(f"Data transfer failed, response: {response.hex().upper() if response else 'None'}")
-                    return False
+                if USE_UDS_TRANSFER:
+                    try:
+                        if not self.max_block_size:
+                            self.log("Warning: Max block size not obtained, using default value 0x0FF8")
+                            self.max_block_size = 4088
+                        
+                        # Calculate total packets with ceiling division to ensure all data is transmitted
+                        total_packets = (data_length + self.max_block_size - 1) // self.max_block_size
+                        if total_packets == 0:
+                            total_packets = 1  # Ensure at least one packet
+                            
+                        self.log(f"Data transfer info - Total length: 0x{data_length:04X} bytes, Packets: {total_packets}, Max block size: 0x{self.max_block_size:04X} bytes")
+                        
+                        sequence_number = 0x01
+                        for packet_index in range(total_packets):
+                            start_offset = packet_index * self.max_block_size
+                            end_offset = min(start_offset + self.max_block_size, data_length)
+                            current_block = hex_data[start_offset:end_offset]
+                            
+                            self.log(f"Transferring packet {packet_index + 1}/{total_packets}, Sequence: 0x{sequence_number:02X}, Length: 0x{len(current_block):04X} bytes")
+                            response = client.transfer_data(sequence_number=sequence_number, data=current_block)
+                            
+                            if not response.positive:
+                                self.log(f"Data block transfer failed, Sequence: 0x{sequence_number:02X}, Response code: 0x{response.code:02X}")
+                                return False
+                            
+                            sequence_number = (sequence_number % 0xFF) + 1
+                        
+                        self.log(f"Data transfer completed, Total packets transferred: {total_packets}")
+                        return True
+                                
+                    except Exception as e:
+                        self.log(f"UDS transfer exception: {str(e)}")
+                        return False
                     
         except Exception as e:
             self.log(f"Data transfer exception: {str(e)}")
             return False
         
     def exit_transfer(self) -> bool:
-        """Step 9: Exit transfer"""
-        self.log("Step: Request exit transfer")
+        """Step 9: Request transfer exit
+        
+        Send a transfer exit request (service 37) to terminate the current transfer session.
+        This should be called after completing data transfer to properly close the session.
+        
+        Returns:
+            bool: True if exit transfer successful, False otherwise
+        """
+        self.log("Step: Request transfer exit")
         try:
             with self.client as client:
-                # Use raw send method
-                client.conn.send(bytes([0x37]))
-                response = client.conn.wait_frame(timeout=3)
+                # Use client's built-in transfer_exit method instead of raw send
+                response = client.request_transfer_exit()
                 
-                if response and response.hex().upper() == '77':
-                    self.log("Exit transfer successful")
+                if response and response.positive:
+                    self.log("Transfer exit successful")
                     return True
                 else:
-                    self.log(f"Exit transfer failed, response: {response.hex().upper() if response else 'None'}")
+                    self.log(f"Transfer exit failed, response: {response.get_payload().hex().upper() if response else 'None'}")
                     return False
         except Exception as e:
-            self.log(f"Exit transfer exception: {str(e)}")
+            self.log(f"Transfer exit exception: {str(e)}")
             return False
             
     def transfer_signature(self, bin_path: str) -> bool:
@@ -378,7 +415,7 @@ class FlashingProcess:
                 sequence_number = 0x01
                 offset = 0
                 
-                while offset < len(hex_data):
+                while offset < data_length:
                     # Calculate current data block
                     block = hex_data[offset:offset + max_block_size]
                     
@@ -567,12 +604,12 @@ class FlashingProcess:
                 self.security_access,                                             # Step 4-5: Security access
                 self.write_f15a_identifier,                                       # Step 6: Write F15A identifier
                 lambda:self.request_download('sbl'),                              # Step 7: Request download
-                self.transfer_hex_data,                                           # Step 8: Transfer HEX data
+                lambda:self.transfer_hex_data(data_type='sbl'),                                           # Step 8: Transfer HEX data
                 self.exit_transfer,                                               # Step 9: Exit transfer
                 lambda: self.transfer_signature(os.path.join(firmware_folder, 'gen6nu_sbl_sign.bin')),  # Step 10: Transfer signature
                 self.erase_memory,                                               # Step 11: Enter Flash mode
                 lambda:self.request_download('app'),                             # Step 12: Request download application
-                self.transfer_app_data,                                          # Step 13: Transfer application data
+                lambda:self.transfer_hex_data(data_type='app'),                                          # Step 13: Transfer application data
                 self.exit_transfer,                                              # Step 14: Exit transfer
                 self.verify_app_signature,                                       # Step 15: Verify application signature
                 self.complete_flash_process,                                     # Step 16: Complete flash process
