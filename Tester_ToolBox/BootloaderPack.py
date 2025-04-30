@@ -1,7 +1,6 @@
 import logging
 import tkinter as tk
 from tkinter import ttk
-import sv_ttk
 import sys
 import os
 import logging

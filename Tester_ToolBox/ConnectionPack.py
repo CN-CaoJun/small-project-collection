@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk
-import sv_ttk
 import sys
 import os
 
@@ -99,7 +98,8 @@ class ConnectionPack:
             try:
                 import os
                 import platform
-                if platform.system() != 'Linux':
+                print(f"platform.system(): {platform.system()}")
+                if platform.system() == 'Linux':
                     print("Scanning SocketCAN interfaces...")
                     net_path = "/sys/class/net"
                     if os.path.exists(net_path):

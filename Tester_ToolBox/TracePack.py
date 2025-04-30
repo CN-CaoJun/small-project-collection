@@ -1,26 +1,25 @@
 import tkinter as tk
 from tkinter import ttk
-import sv_ttk
 from datetime import datetime
 
 class TracePack:
     def __init__(self, parent):
-        """初始化消息追踪模块"""
+        """Initialize message tracking module"""
         self.parent = parent
         self.create_widgets()
         
     def create_widgets(self):
-        """创建界面控件"""
-        # 创建消息显示区域
+        """Create interface widgets"""
+        # Create message display area
         self.msg_display = tk.Text(self.parent, height=10)
         self.msg_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=2)
         
-        # 清除按钮
+        # Clear button
         self.clear_button = ttk.Button(self.parent, text="Clear", command=self.clear_display)
         self.clear_button.pack(side=tk.RIGHT, padx=5, pady=2)
         
     def append_message(self, msg):
-        """追加新的CAN消息"""
+        """Append new CAN message"""
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         # msg could be any type, convert to string for display
         msg_str = f"[{timestamp}] {str(msg)}\n"
@@ -28,5 +27,5 @@ class TracePack:
         self.msg_display.see(tk.END)
         
     def clear_display(self):
-        """清除显示区域的所有消息"""
+        """Clear all messages in display area"""
         self.msg_display.delete(1.0, tk.END)
