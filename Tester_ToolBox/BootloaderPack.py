@@ -109,6 +109,7 @@ class BootloaderPack:
                 'default': '>H',
                 0x7705: FlexRawData(30),
                 0xF15A: FlexRawData(15),
+                0xF0F0: FlexRawData(1),
             }
             # Modify timeout configuration
             uds_config['p2_timeout'] = 5  # Increased to 2 seconds

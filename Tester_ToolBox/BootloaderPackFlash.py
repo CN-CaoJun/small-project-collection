@@ -31,7 +31,8 @@ class FlashingProcess:
         self.trace_handler = trace_handler
         self.firmware_folder = None
         
-        # 添加文件路径和解析结果存储
+        self.sbl_sig_data = None
+        self.app_sig_data = None
         self.sbl_data = None
         self.sbl_start_addr = None
         self.sbl_data_length = None
@@ -44,19 +45,31 @@ class FlashingProcess:
         """输出日志"""
         if self.trace_handler:
             self.trace_handler(message)
-    def read_hex_file(self, hex_file_path: str) -> Tuple[Optional[bytes], Optional[int], Optional[int]]:
-        """Read hex file using IntelHex library
+    def read_signature_file(self, file_path: str) -> Optional[bytes]:
+        """Read and validate signature file
         
         Args:
-            hex_file_path: Path to the hex file
+            file_path: Path to the signature binary file
             
         Returns:
-            Tuple containing:
-            - Binary data bytes
-            - Start address
-            - Data length
-            Or (None, None, None) if parsing fails
+            Optional[bytes]: Signature data if successful, None if failed
         """
+        try:
+            if not os.path.exists(file_path):
+                self.log(f"Error: Signature file does not exist: {file_path}")
+                return None
+                
+            with open(file_path, 'rb') as f:
+                data = f.read()
+                self.log(f"Successfully read signature file {os.path.basename(file_path)}")
+                self.log(f"File size: 0x{len(data):04X} bytes")
+                # self.log(f"File content: {data.hex().upper()}")
+                return data
+                
+        except Exception as e:
+            self.log(f"Signature file read exception: {str(e)}")
+            return None
+    def read_hex_file(self, hex_file_path: str) -> Tuple[Optional[bytes], Optional[int], Optional[int]]:
         try:
             if not os.path.exists(hex_file_path):
                 self.log(f"Error: HEX file does not exist: {hex_file_path}")
@@ -246,7 +259,7 @@ class FlashingProcess:
                             end_offset = min(start_offset + self.max_block_size, data_length)
                             current_block = hex_data[start_offset:end_offset]
                             
-                            self.log(f"Transferring packet {packet_index + 1}/{total_packets}, Sequence: 0x{sequence_number:02X}, Length: 0x{len(current_block):04X} bytes")
+                            self.log(f"Transferring packet {packet_index + 1:02d}/{total_packets:02d}, Sequence: 0x{sequence_number:02X}, Length: 0x{len(current_block):04X} bytes")
                             response = client.transfer_data(sequence_number=sequence_number, data=current_block)
                             
                             if not response.positive:
@@ -267,19 +280,11 @@ class FlashingProcess:
             return False
         
     def exit_transfer(self) -> bool:
-        """Step 9: Request transfer exit
-        
-        Send a transfer exit request (service 37) to terminate the current transfer session.
-        This should be called after completing data transfer to properly close the session.
-        
-        Returns:
-            bool: True if exit transfer successful, False otherwise
-        """
         self.log("Step: Request transfer exit")
         try:
             with self.client as client:
                 # Use client's built-in transfer_exit method instead of raw send
-                response = client.request_transfer_exit()
+                response = client.request_transfer_exit(data=None)
                 
                 if response and response.positive:
                     self.log("Transfer exit successful")
@@ -291,267 +296,130 @@ class FlashingProcess:
             self.log(f"Transfer exit exception: {str(e)}")
             return False
             
-    def transfer_signature(self, bin_path: str) -> bool:
-        """Step 10: Transfer signature file"""
-        self.log("Step: Transfer signature file")
+    def transfer_signature(self, data_type: str = 'sbl') -> bool:
+        self.log(f"Step: Transfer {data_type.upper()} signature")
         try:
-            if not os.path.exists(bin_path):
-                self.log(f"Error: Signature file does not exist: {bin_path}")
+            if data_type.lower() == 'sbl':
+                if not self.sbl_sig_data:
+                    self.log("Error: SBL signature data not initialized")
+                    return False
+                sig_data = self.sbl_sig_data
+            elif data_type.lower() == 'app':
+                if not self.app_sig_data:
+                    self.log("Error: APP signature data not initialized")
+                    return False
+                sig_data = self.app_sig_data
+            else:
+                self.log(f"Error: Invalid signature type: {data_type}")
                 return False
                 
             with self.client as client:
-                # Read signature file
-                with open(bin_path, 'rb') as f:
-                    bin_data = f.read(512)  # Read 512 bytes
-                    
-                # Send data
-                header = bytes.fromhex('31 01 D0 02')
-                request = header + bin_data
-                client.conn.send(request)
+                response = client.routine_control(
+                    routine_id=0xD002,
+                    control_type=0x01,
+                    data=sig_data
+                )
                 
-                # Wait for response
-                response = client.conn.wait_frame(timeout=3)
                 if not response:
                     self.log("No response received")
                     return False
                     
-                # 检查是否直接收到正响应
-                if response.hex().upper() == '7101D00200':
-                    self.log("Signature verification successful")
+                if response.positive and response.data.hex().upper().startswith('01D00200'):
+                    self.log(f"{data_type.upper()} signature verification successful")
                     return True
                     
-                # 如果收到中间响应，则继续等待最终响应
-                if response.hex().upper() == '7F3178':
-                    self.log("Received intermediate response, waiting for final response...")
-                    final_response = client.conn.wait_frame(timeout=5)
-                    if final_response and final_response.hex().upper() == '7101D00200':
-                        self.log("Signature verification successful")
-                        return True
-                    else:
-                        self.log(f"Signature verification failed, response: {final_response.hex().upper() if final_response else 'None'}")
-                        return False
-                
-                # 如果既不是正响应也不是中间响应，则验证失败
-                self.log(f"Unexpected response received: {response.hex().upper()}")
+                self.log(f"Unexpected response received: {response.get_payload().hex().upper()}")
                 return False
-            
+                
         except Exception as e:
-            self.log(f"Signature transfer exception: {str(e)}")
+            self.log(f"{data_type.upper()} signature transfer exception: {str(e)}")
             return False
             
     def erase_memory(self) -> bool:
-        """Step 11: Erase APP address"""
+        """Step 11: Erase APP address using routine control service"""
         self.log("Step: Erase APP address")
         try:
             with self.client as client:
-                request = bytes.fromhex('31 01 FF 00 44 00 00 00 00 00 02 E0 00')
-                client.conn.send(request)
-                # Wait for response
-                response = client.conn.wait_frame(timeout=3)
+
+                response = client.routine_control(
+                    routine_id=0xFF00,
+                    control_type=0x01,
+                    data=bytes.fromhex('44 00 00 00 00 00 02 E0 00')
+                )
+                
                 if not response:
                     self.log("No response received")
                     return False
                     
-                # 检查是否直接收到正响应
-                if response.hex().upper() == '7101FF0000':
-                    self.log("Signature verification successful")
+                if response.positive and response.data.hex().upper().startswith('01FF0000'):
+                    self.log("Memory erase successful")
                     return True
                     
-                # 如果收到中间响应，则继续等待最终响应
-                if response.hex().upper() == '7F3178':
-                    self.log("Received intermediate response, waiting for final response...")
-                    final_response = client.conn.wait_frame(timeout=5)
-                    if final_response and final_response.hex().upper() == '7101FF0000':
-                        self.log("Signature verification successful")
+                if response.code == 0x78:
+                    self.log("Received pending response (0x78), waiting for final response...")
+                    final_response = client.wait_for_response(timeout=5)
+                    if final_response and final_response.positive and final_response.data.hex().upper().startswith('01FF0000'):
+                        self.log("Memory erase successful")
                         return True
                     else:
-                        self.log(f"Signature verification failed, response: {final_response.hex().upper() if final_response else 'None'}")
+                        self.log(f"Memory erase failed, response: {final_response.get_payload().hex().upper() if final_response else 'None'}")
                         return False
                 
-                # 如果既不是正响应也不是中间响应，则验证失败
-                self.log(f"Unexpected response received: {response.hex().upper()}")
+                # 处理意外响应
+                self.log(f"Unexpected response received: {response.get_payload().hex().upper()}")
                 return False
-            
-        except Exception as e:
-            self.log(f"Enter Flash mode exception: {str(e)}")
-            return False
-
-    def request_app_download(self) -> bool:
-        """Step 12: Request application download"""
-        self.log("Step: Request application download")
-        try:
-            with self.client as client:
-                request = bytes.fromhex('34 00 44 00 00 00 00 00 02 E0 00')
-                client.conn.send(request)
-                response = client.conn.wait_frame(timeout=5)
-                
-                if response and response.hex().upper().startswith('74200FFA'):
-                    self.log(f"Download request successful, response: {response.hex().upper()}")
-                    return True
-                else:
-                    self.log(f"Download request failed, response: {response.hex().upper() if response else 'None'}")
-                    return False
-        except Exception as e:
-            self.log(f"Download request exception: {str(e)}")
-            return False
-
-    def transfer_app_data(self) -> bool:
-        self.log("Step: Transfer application data")
-        try:
-            if not self.app_data:
-                self.log("APP data not initialized")
-                return False
-                
-            hex_data = self.app_data
-            start_addr = self.app_start_addr
-            data_length = self.app_data_length
-            
-            self.log(f"HEX file parse result: Start address=0x{start_addr:04X}, Data length=0x{data_length:04X} bytes")
-            
-            with self.client as client:
-                # Get max package length from 34 service response (example response: 74 20 0F FA)
-                # Assume max package length is in response data bytes 3-4 (0x0FFA = 4090 bytes)
-                max_block_size = 4088  # Need to parse based on actual response value
-                sequence_number = 0x01
-                offset = 0
-                
-                while offset < data_length:
-                    # Calculate current data block
-                    block = hex_data[offset:offset + max_block_size]
-                    
-                    # Build 36 service request
-                    request = bytes([0x36, sequence_number]) + block
-                    client.conn.send(request)
-                    
-                    # Wait and handle response
-                    response = client.conn.wait_frame(timeout=5)
-                    retry_count = 0
-                    
-                    # Handle pending response
-                    while response and response.hex().upper() == '7F3678' and retry_count < 3:
-                        self.log(f"Received 78 pending response, retry {retry_count+1}/3...")
-                        response = client.conn.wait_frame(timeout=5)
-                        retry_count += 1
-                    
-                    if not response or not response.hex().upper().startswith('76'):
-                        self.log(f"Data transfer failed, sequence number: {sequence_number}, response: {response.hex().upper() if response else 'None'}")
-                        return False
-                        
-                    self.log(f"Successfully transferred block {sequence_number}, length: {len(block)} bytes")
-                    
-                    # Update sequence number and offset
-                    sequence_number = (sequence_number % 0xFF) + 1  # Sequence number cycle
-                    offset += max_block_size
-
-                self.log("Application data transfer complete")
-                return True
                 
         except Exception as e:
-            self.log(f"Data transfer exception: {str(e)}")
-            return False
-
-    def verify_app_signature(self) -> bool:
-        """Step 15: Verify application signature"""
-        self.log("Step: Verify application signature")
-        try:
-            if not self.firmware_folder:
-                self.log("Error: Firmware folder path not set")
-                return False
-                
-            bin_path = os.path.join(self.firmware_folder, 'gen6nu_sign.bin')
-            if not os.path.exists(bin_path):
-                self.log(f"Error: Signature file does not exist: {bin_path}")
-                return False
-                
-            with self.client as client:
-                with open(bin_path, 'rb') as f:
-                    bin_data = f.read(512)
-                    
-                header = bytes.fromhex('31 01 D0 02')
-                request = header + bin_data
-                client.conn.send(request)
-                
-                # Wait for response
-                response = client.conn.wait_frame(timeout=3)
-                if not response:
-                    self.log("No response received")
-                    return False
-                    
-                # 检查是否直接收到正响应
-                if response.hex().upper() == '7101D00200':
-                    self.log("Signature verification successful")
-                    return True
-                    
-                # 如果收到中间响应，则继续等待最终响应
-                if response.hex().upper() == '7F3178':
-                    self.log("Received intermediate response, waiting for final response...")
-                    final_response = client.conn.wait_frame(timeout=5)
-                    if final_response and final_response.hex().upper() == '7101D00200':
-                        self.log("Signature verification successful")
-                        return True
-                    else:
-                        self.log(f"Signature verification failed, response: {final_response.hex().upper() if final_response else 'None'}")
-                        return False
-                
-                # 如果既不是正响应也不是中间响应，则验证失败
-                self.log(f"Unexpected response received: {response.hex().upper()}")
-                return False
-        except Exception as e:
-            self.log(f"Signature verification exception: {str(e)}")
+            self.log(f"Memory erase exception: {str(e)}")
             return False
 
     def complete_flash_process(self) -> bool:
-        """Step 16: Complete flash process"""
         self.log("Step: Complete flash process")
         try:
             with self.client as client:
-                request = bytes.fromhex('31 01 FF 01')
-                client.conn.send(request)
+                # Use routine control service with routine ID 0xFF01
+                response = client.routine_control(
+                    routine_id=0xFF01,
+                    control_type=0x01
+                )
                 
-                # Wait for response
-                response = client.conn.wait_frame(timeout=3)
                 if not response:
                     self.log("No response received")
                     return False
                     
-                # 检查是否直接收到正响应
-                if response.hex().upper() == '7101FF0100':
+                # Check for positive response
+                if response.positive and response.data.hex().upper().startswith('01FF0100'):
                     self.log("Complete flash process successful")
                     return True
                     
-                # 如果收到中间响应(78 pending或7F3178)，则继续等待最终响应
-                if response.hex().upper() in ['7F3178', '7F3178']:
-                    self.log("Received intermediate response, waiting for final response...")
-                    final_response = client.conn.wait_frame(timeout=5)
-                    if final_response and final_response.hex().upper() == '7101FF0100':
-                        self.log("Complete flash process successful")
-                        return True
-                    else:
-                        self.log(f"Complete flash process failed, response: {final_response.hex().upper() if final_response else 'None'}")
-                        return False
-                
-                # 如果既不是正响应也不是中间响应，则验证失败
-                self.log(f"Unexpected response received: {response.hex().upper()}")
+                # Handle unexpected response
+                self.log(f"Unexpected response received: {response.get_payload().hex().upper()}")
                 return False
-            
+                
         except Exception as e:
             self.log(f"Complete flash process exception: {str(e)}")
             return False
 
     def reset_ecu(self) -> bool:
-        """Step 17: Reset ECU"""
+        """Step 17: Reset ECU
+        
+        Performs an ECU reset using UDS service 0x11 (ECU Reset)
+        with reset type 0x03 (soft reset).
+        
+        Returns:
+            bool: True if reset successful, False otherwise
+        """
         self.log("Step: Reset ECU")
         try:
             with self.client as client:
-                request = bytes.fromhex('11 03')
-                client.conn.send(request)
-                response = client.conn.wait_frame(timeout=3)
+                # Use UDS client's ecu_reset method instead of raw request
+                response = client.ecu_reset(reset_type=0x03)  # 0x03 = soft reset
                 
-                if response and response.hex().upper() == '5103':
+                if response and response.positive:
                     self.log("ECU reset successful")
                     return True
                 else:
-                    self.log(f"ECU reset failed, response: {response.hex().upper() if response else 'None'}")
+                    self.log(f"ECU reset failed, response: {response.get_payload().hex().upper() if response else 'None'}")
                     return False
         except Exception as e:
             self.log(f"ECU reset exception: {str(e)}")
@@ -562,15 +430,13 @@ class FlashingProcess:
         self.log("Step: Check programming status")
         try:
             with self.client as client:
-                request = bytes.fromhex('22 F0 F0')
-                client.conn.send(request)
-                response = client.conn.wait_frame(timeout=3)
+                response = client.read_data_by_identifier(0xF0F0)
                 
-                if response and response.hex().upper().startswith('62'):
+                if response and response.positive:  
                     self.log("Version check successful")
                     return True
                 else:
-                    self.log(f"Version check failed, response: {response.hex().upper() if response else 'None'}")
+                    self.log(f"Version check failed")
                     return False
         except Exception as e:
             self.log(f"Programming status check exception: {str(e)}")
@@ -581,16 +447,18 @@ class FlashingProcess:
         self.firmware_folder = firmware_folder
         self.log("Start executing flashing sequence...")
         
+        sbl_sig_path = os.path.join(firmware_folder, 'gen6nu_sbl_sign.bin')
+        app_sig_path = os.path.join(firmware_folder, 'gen6nu_sign.bin')
+        self.sbl_sig_data = self.read_signature_file(sbl_sig_path)
+        self.app_sig_data = self.read_signature_file(app_sig_path)
+        
         sbl_path = os.path.join(firmware_folder, 'gen6nu_sbl.hex')
         app_path = os.path.join(firmware_folder, 'gen6nu.hex')
-        
-        # 读取SBL文件
         self.sbl_data, self.sbl_start_addr, self.sbl_data_length = self.read_hex_file(sbl_path)
         if not self.sbl_data:
             self.log("Failed to read SBL HEX file")
             return False
             
-        # 读取APP文件
         self.app_data, self.app_start_addr, self.app_data_length = self.read_hex_file(app_path) 
         if not self.app_data:
             self.log("Failed to read APP HEX file")
@@ -603,15 +471,15 @@ class FlashingProcess:
                 lambda: self.change_session(0x02),                                # Step 3: Switch to programming session
                 self.security_access,                                             # Step 4-5: Security access
                 self.write_f15a_identifier,                                       # Step 6: Write F15A identifier
-                lambda:self.request_download('sbl'),                              # Step 7: Request download
-                lambda:self.transfer_hex_data(data_type='sbl'),                                           # Step 8: Transfer HEX data
-                self.exit_transfer,                                               # Step 9: Exit transfer
-                lambda: self.transfer_signature(os.path.join(firmware_folder, 'gen6nu_sbl_sign.bin')),  # Step 10: Transfer signature
+                lambda:self.request_download(download_type = 'sbl'),                # Step 7: Request download
+                lambda:self.transfer_hex_data(data_type = 'sbl'),               # Step 8: Transfer HEX data
+                lambda:self.exit_transfer(),                                          # Step 9: Exit transfer
+                lambda:self.transfer_signature(data_type = 'sbl'),                  # Step 10: Transfer signature
                 self.erase_memory,                                               # Step 11: Enter Flash mode
-                lambda:self.request_download('app'),                             # Step 12: Request download application
-                lambda:self.transfer_hex_data(data_type='app'),                                          # Step 13: Transfer application data
-                self.exit_transfer,                                              # Step 14: Exit transfer
-                self.verify_app_signature,                                       # Step 15: Verify application signature
+                lambda:self.request_download(download_type = 'app'),                             # Step 12: Request download application
+                lambda:self.transfer_hex_data(data_type = 'app'),                                          # Step 13: Transfer application data
+                lambda:self.exit_transfer(),                                              # Step 14: Exit transfer
+                lambda:self.transfer_signature(data_type = 'app'),                                       # Step 15: Verify application signature
                 self.complete_flash_process,                                     # Step 16: Complete flash process
                 self.reset_ecu,                                                 # Step 17: Reset ECU
                 self.check_programming_status                                    # Step 18: Check programming status
