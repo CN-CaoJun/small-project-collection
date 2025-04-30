@@ -43,8 +43,8 @@ class BootloaderPack:
             # Configure ISO-TP parameters
             if isfd:
                 isotp_params = {
-                    'stmin': 10,
-                    'blocksize': 8,
+                    'stmin': 0,
+                    'blocksize': 0,
                     'tx_padding': 0x00,
                     'override_receiver_stmin': None,
                     'wftmax': 4,
@@ -63,8 +63,8 @@ class BootloaderPack:
                     self.trace_handler("Using CAN-FD ISO-TP parameters")
             else:
                 isotp_params = {
-                    'stmin': 10,
-                    'blocksize': 8,
+                    'stmin': 0,
+                    'blocksize': 0,
                     'tx_padding': 0x00,
                     'override_receiver_stmin': None,
                     'wftmax': 4,
