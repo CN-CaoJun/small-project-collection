@@ -3,6 +3,7 @@ from tkinter import ttk
 import sv_ttk
 import sys
 import os
+import logging
 
 sys.path.insert(0, os.path.abspath("reference_modules/python-can"))
 sys.path.insert(0, os.path.abspath("reference_modules/python-can-isotp"))

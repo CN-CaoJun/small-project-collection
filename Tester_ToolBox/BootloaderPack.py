@@ -1,8 +1,10 @@
+import logging
 import tkinter as tk
 from tkinter import ttk
 import sv_ttk
 import sys
 import os
+import logging
 
 sys.path.insert(0, os.path.abspath("reference_modules/python-can"))
 sys.path.insert(0, os.path.abspath("reference_modules/python-can-isotp"))
@@ -39,7 +41,8 @@ class BootloaderPack:
                 if self.ensure_trace_handler():
                     self.trace_handler("Error: CAN bus not initialized")
                 return False
-                
+            
+            logging.basicConfig(level=logging.DEBUG)
             # Configure ISO-TP parameters
             if isfd:
                 isotp_params = {
@@ -112,12 +115,12 @@ class BootloaderPack:
                 0xF0F0: FlexRawData(1),
             }
             # Modify timeout configuration
-            uds_config['p2_timeout'] = 5  # Increased to 2 seconds
-            uds_config['p2_star_timeout'] = 5  
-            uds_config['request_timeout'] = 4  # Increased total timeout
+            uds_config['p2_timeout'] = 1  # Increased to 2 seconds
+            uds_config['p2_star_timeout'] = 0.5  
+            uds_config['request_timeout'] = 1  # Increased total timeout
             uds_config['session_timing'] = {
                 'p2_server_max': 3,  # Server maximum response time
-                'p2_star_server_max': 5  # Server maximum extended response time
+                'p2_star_server_max': 3  # Server maximum extended response time
             }
             
             # Print UDS configuration information
