@@ -338,11 +338,12 @@ class DiagnosticPack:
             # Send message
             self.tp_stack.send(data)
             
-            # Display send info (with timestamp)
-            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-            
             if self.ensure_trace_handler():
-                self.trace_handler(f"TX: {hex_str.upper()}")
+                self.trace_handler("TX:")
+                for i in range(0, len(data), 8):
+                    chunk = data[i:i+8]
+                    hex_str = ' '.join(f"0x{b:02X}" for b in chunk)
+                    self.trace_handler(f"    {hex_str}")
             
         except Exception as e:
             if self.ensure_trace_handler():
@@ -366,9 +367,13 @@ class DiagnosticPack:
     def update_display(self, data, timestamp):
         """Update display content (executed in main thread)"""
         try:
-            hex_str = ' '.join(f"{b:02X}" for b in data)
+            # 将数据按8字节分组并格式化显示
             if self.ensure_trace_handler():
-                self.trace_handler(f"RX: {hex_str}")
+                self.trace_handler("RX:")
+                for i in range(0, len(data), 8):
+                    chunk = data[i:i+8]
+                    hex_str = ' '.join(f"0x{b:02X}" for b in chunk)
+                    self.trace_handler(f"    {hex_str}")
         except Exception as e:
             if self.ensure_trace_handler():
                 self.trace_handler(f"Display ERROR: {str(e)}")
