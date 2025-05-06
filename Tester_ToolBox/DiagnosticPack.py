@@ -158,17 +158,15 @@ class DiagnosticPack:
     def on_enable_diag(self):
         """Handle Enable Diag button state change"""
         if self.enable_button.instate(['selected']):
-            # Disable all parameter input controls
-            for child in self.params_container.winfo_children():
-                if isinstance(child, (ttk.Entry, ttk.Frame)):
-                    for widget in child.winfo_children():
-                        if isinstance(widget, ttk.Entry):
-                            widget.configure(state='disabled')
-            self.initialize_tp_layer()
-            if not self.tp_stack:
-                self.enable_button.state(['!selected'])
-            else:
+            if self.initialize_tp_layer():
+                for child in self.params_container.winfo_children():
+                    if isinstance(child, (ttk.Entry, ttk.Frame)):
+                        for widget in child.winfo_children():
+                            if isinstance(widget, ttk.Entry):
+                                widget.configure(state='disabled')
                 self.send_button.configure(state='normal')
+            else:
+                self.enable_button.state(['!selected'])
         else:
             # Enable all parameter input controls
             for child in self.params_container.winfo_children():
@@ -188,7 +186,11 @@ class DiagnosticPack:
             self.rxid_var.set(ecu_config['RXID'])
             
     def initialize_tp_layer(self):
-        """Initialize ISO-TP layer"""
+        """Initialize ISO-TP layer
+        
+        Returns:
+            bool: True if initialization successful, False otherwise
+        """
         try:
             # Get CAN bus object from main window
             main_window = self.parent.winfo_toplevel()
@@ -197,7 +199,7 @@ class DiagnosticPack:
             if not can_bus:
                 if self.ensure_trace_handler():
                     self.trace_handler("ERROR: CAN bus not initialized")
-                return
+                return False
                 
             # Get TP layer parameters
             stmin = int(self.stmin_entry.get(), 16)
@@ -281,10 +283,12 @@ class DiagnosticPack:
             
             if self.ensure_trace_handler():
                 self.trace_handler(f"ISO-TP Layer init success -- Request ID: 0x{txid:03X}, Response ID: 0x{rxid:03X}")
+            return True
             
         except Exception as e:
             if self.ensure_trace_handler():
                 self.trace_handler(f"ERROR: {str(e)}")
+            return False
 
     def release_tp_layer(self):
         """Release ISO-TP layer"""
