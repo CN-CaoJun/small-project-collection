@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.abspath("reference_modules/python-can-isotp"))
 sys.path.insert(0, os.path.abspath("reference_modules/python-udsoncan"))
 
 import can
+from can.interfaces.vector import canlib, xlclass, xldefine
 import isotp
 import time
 import json
@@ -35,6 +36,8 @@ class CANBusFactory:
             self._create_pcan_bus()
         elif self.channel_type == 'vector':
             self._create_vector_bus()
+        elif self.channel_type == 'virtualvector':
+            self._create_virtual_vector_bus()
         elif self.channel_type == 'slcan':
             self._create_slcan_bus()
         elif self.channel_type == 'socketcan':
@@ -82,6 +85,20 @@ class CANBusFactory:
         try:
             self.can_bus = can.Bus()
             print(f"Vector bus initialized successfully in {'CANFD' if self.is_fd else 'CAN'} mode.")
+        except Exception as e:
+            print(f"Failed to initialize Vector bus: {e}")
+            raise
+    def _create_virtual_vector_bus(self):
+        """Create Vector bus instance"""
+        try:
+            self.can_bus = canlib.VectorBus(
+                    channel = 0,  
+                    fd=False,
+                    bitrate=500000,
+                    tseg1_abr=63,
+                    tseg2_abr=16,
+                    sjw_abr=16)
+            print(f"Virtual Vector bus initialized successfully in {'CANFD' if self.is_fd else 'CAN'} mode.")
         except Exception as e:
             print(f"Failed to initialize Vector bus: {e}")
             raise
@@ -272,7 +289,7 @@ def main():
     try:
         # Create CAN bus instance
         # can_factory = CANBusFactory(channel_type='vector', is_fd=False)
-        can_factory = CANBusFactory(channel_type='socketcan', is_fd=False)
+        can_factory = CANBusFactory(channel_type='virtualvector', is_fd=False)
         bus, notifier = can_factory.create_bus()
 
         # Create ISOTP layer
