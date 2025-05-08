@@ -18,8 +18,6 @@ import time
 from udsoncan.connections import PythonIsoTpConnection
 from udsoncan.client import Client
 import udsoncan.configs
-# from udsoncan import services
-# from udsoncan import MemoryLocation
 from typing import Optional, List, Union, Tuple
 from udsoncan import Response
 from udsoncan import MemoryLocation
@@ -86,6 +84,20 @@ class FlashingProcess:
         except Exception as e:
             self.log(f"Error reading HEX file: {str(e)}")
             return None, None, None
+    def program_request_only(self, data: bytes) -> bool:
+        """Send UDS request without waiting for response
+        
+        Args:
+            data: Data content to be sent
+        """
+        try:
+            with self.client as client:
+                client.conn.send(data)
+                self.log(f"Send data: {data.hex().upper()}")
+                return True
+            
+        except Exception as e:
+            self.log(f"Send request exception: {str(e)}")
     def change_session(self, session_type: int) -> bool:
         """Step 1 and 3: Change diagnostic session"""
         self.log(f"Step: Switch to session type 0x{session_type:02X}")
@@ -101,16 +113,16 @@ class FlashingProcess:
         except Exception as e:
             self.log(f"Session switch exception: {str(e)}")
             return False
-            
+    
     def enter_extended_session(self) -> bool:
         """Step 2: Enter extended session"""
         self.log("Step: Enter extended session")
         try:
             with self.client as client:
-                response = client.routine_control(routine_id=0xD003, control_type=0x01)
+                response = client.routine_control(routine_id=0x0203, control_type=0x01)
                 self.log(f"Response content: {response.data.hex().upper() if response else 'None'}")
-                if response and response.data.hex().upper().startswith('01D00300'):
-                    self.log("Extended session successful")
+                if response.positive:
+                    self.log("Extended session  31 01 02 03 successful")
                     return True
                 else:
                     self.log(f"Extended session failed, response: {response.data.hex().upper() if response else 'None'}")
@@ -125,26 +137,21 @@ class FlashingProcess:
         try:
             with self.client as client:
                 # Request seed (Step 4)
-                response = client.request_seed(level=0x07)
+                response = client.request_seed(level=0x11)
                 if not response:
                     self.log("Failed to get seed")
                     return False
                     
                 self.log(f"Complete response data: {response.data.hex().upper()}")
                 print(f"seed response: {response.data.hex().upper()}")
-                
-                seed = response.data[1:5]  # Extract correct 4 bytes
+                seed = response.data[1:5]
                 self.log(f"Successfully got seed (length {len(seed)}): {seed.hex().upper()}")
                 
-                seed_int = int.from_bytes(seed, byteorder='big')  # Convert bytes type seed to integer
-                computed_key = SecurityKeyAlgorithm.compute_level4(
-                    seed=seed_int, 
-                    keyk=SecurityKeyAlgorithm.SECURITY_KKEY_L4
-                )
+                computed_key = SecurityKeyAlgorithmBDU.compute_key(seed)
                 key = computed_key.to_bytes(4, byteorder='big')
-                print(f"Key: 0x{computed_key:08X}")  # Print key value
-                response = client.send_key(level=0x08, key=key)
-                
+                print(f"Key: 0x{computed_key:08X}")
+
+                response = client.send_key(level=0x12, key=key)
                 if response:
                     self.log("Security access successful")
                     return True
@@ -160,7 +167,7 @@ class FlashingProcess:
         self.log("Step: Write F15A identifier")
         try:
             with self.client as client:
-                data = bytes.fromhex('40 04 13 00 00 00 03 00 00 00 00 00 00 00 00')
+                data = bytes.fromhex('73 05 08 7B 43 6C 7F 3F EC')
                 response = client.write_data_by_identifier(did=0xF15A, value=data)
                 
                 if response and response.positive:
@@ -179,15 +186,17 @@ class FlashingProcess:
                 if download_type.lower() == 'sbl':
                     addr = self.sbl_start_addr
                     size = self.sbl_data_length
+                    address_format = 0x01
                 elif download_type.lower() == 'app':
                     addr = self.app_start_addr
                     size = self.app_data_length
+                    address_format = 0x02
                 else:
                     self.log(f"Invalid download type: {download_type}")
                     return False
 
                 memory_location = MemoryLocation(
-                    address=0x01,
+                    address=address_format,
                     memorysize=size,
                     address_format=8,
                     memorysize_format=32
@@ -252,6 +261,7 @@ class FlashingProcess:
                             
                         self.log(f"Data transfer info - Total length: 0x{data_length:04X} bytes, Packets: {total_packets}, Max block size: 0x{self.max_block_size:04X} bytes")
                         
+                        # Initialize sequence number to 0x01
                         sequence_number = 0x01
                         for packet_index in range(total_packets):
                             start_offset = packet_index * self.max_block_size
@@ -265,7 +275,8 @@ class FlashingProcess:
                                 self.log(f"Data block transfer failed, Sequence: 0x{sequence_number:02X}, Response code: 0x{response.code:02X}")
                                 return False
                             
-                            sequence_number = (sequence_number % 0xFF) + 1
+                            # Update sequence number: after 0xFF it should wrap to 0x00
+                            sequence_number = (sequence_number + 1) % 0x100
                         
                         self.log(f"Data transfer completed, Total packets transferred: {total_packets}")
                         return True
@@ -312,18 +323,23 @@ class FlashingProcess:
                 self.log(f"Error: Invalid signature type: {data_type}")
                 return False
                 
+            import zlib
+            crc32_value = zlib.crc32(sig_data)
+            crc32_bytes = crc32_value.to_bytes(4, byteorder='big')
+            complete_data = crc32_bytes + sig_data
+            
             with self.client as client:
                 response = client.routine_control(
-                    routine_id=0xD002,
+                    routine_id=0x0202,
                     control_type=0x01,
-                    data=sig_data
+                    data=complete_data
                 )
                 
                 if not response:
                     self.log("No response received")
                     return False
                     
-                if response.positive and response.data.hex().upper().startswith('01D00200'):
+                if response.positive:
                     self.log(f"{data_type.upper()} signature verification successful")
                     return True
                     
@@ -343,14 +359,14 @@ class FlashingProcess:
                 response = client.routine_control(
                     routine_id=0xFF00,
                     control_type=0x01,
-                    data=bytes.fromhex('44 00 00 00 00 00 02 E0 00')
+                    data=bytes.fromhex('01 02')
                 )
                 
                 if not response:
                     self.log("No response received")
                     return False
                     
-                if response.positive and response.data.hex().upper().startswith('01FF0000'):
+                if response.positive:
                     self.log("Memory erase successful")
                     return True
                     
@@ -364,7 +380,6 @@ class FlashingProcess:
                         self.log(f"Memory erase failed, response: {final_response.get_payload().hex().upper() if final_response else 'None'}")
                         return False
                 
-                # 处理意外响应
                 self.log(f"Unexpected response received: {response.get_payload().hex().upper()}")
                 return False
                 
@@ -387,11 +402,10 @@ class FlashingProcess:
                     return False
                     
                 # Check for positive response
-                if response.positive and response.data.hex().upper().startswith('01FF0100'):
+                if response.positive:
                     self.log("Complete flash process successful")
                     return True
                     
-                # Handle unexpected response
                 self.log(f"Unexpected response received: {response.get_payload().hex().upper()}")
                 return False
                 
@@ -412,7 +426,7 @@ class FlashingProcess:
         try:
             with self.client as client:
                 # Use UDS client's ecu_reset method instead of raw request
-                response = client.ecu_reset(reset_type=0x03)  # 0x03 = soft reset
+                response = client.ecu_reset(reset_type=0x01) 
                 
                 if response and response.positive:
                     self.log("ECU reset successful")
@@ -423,7 +437,23 @@ class FlashingProcess:
         except Exception as e:
             self.log(f"ECU reset exception: {str(e)}")
             return False
+    def program_testerpresent(self) -> bool:
+        """Step 18: Program tester present"""
+        self.log("Step: Program tester present")
+        try:
+            with self.client as client:
+                
+                response = client.tester_present()
+                if response and response.positive:
+                    self.log("Tester present programming successful")
+                    return True
+                else:
+                    self.log(f"Tester present programming failed, response: {response.get_payload().hex().upper() if response else 'None'}")
+                    return False
 
+        except Exception as e:
+            self.log(f"Tester present programming exception: {str(e)}")
+            return False
     def check_programming_status(self) -> bool:
         """Step 18: Check programming status"""
         self.log("Step: Check programming status")
@@ -441,6 +471,28 @@ class FlashingProcess:
             self.log(f"Programming status check exception: {str(e)}")
             return False
 
+    def fault_memory_clear(self) -> bool:
+        """Clear fault memory using UDS service 0x14
+        
+        Returns:
+            bool: True if clear successful, False otherwise
+        """
+        self.log("Step: Clear fault memory")
+        try:
+            with self.client as client:
+                # Send clear DTC command (0x14 FF FF FF)
+                response = client.clear_dtc(group = 0xFFFFFF)
+                
+                if response and response.positive:
+                    self.log("Fault memory clear successful")
+                    return True
+                else:
+                    self.log(f"Fault memory clear failed, response: {response.get_payload().hex().upper() if response else 'None'}")
+                    return False
+                    
+        except Exception as e:
+            self.log(f"Fault memory clear exception: {str(e)}")
+            return False
     def execute_flashing_sequence(self, firmware_folder: str) -> bool:
         """Execute complete flashing sequence"""
         self.firmware_folder = firmware_folder
@@ -465,23 +517,30 @@ class FlashingProcess:
         
         try:
             steps = [
-                lambda: self.change_session(0x03),                                # Step 1: Switch to extended diagnostic session
-                self.enter_extended_session,                                      # Step 2: Enter extended session
-                lambda: self.change_session(0x02),                                # Step 3: Switch to programming session
-                self.security_access,                                             # Step 4-5: Security access
-                self.write_f15a_identifier,                                       # Step 6: Write F15A identifier
-                lambda:self.request_download(download_type = 'sbl'),                # Step 7: Request download
-                lambda:self.transfer_hex_data(data_type = 'sbl'),               # Step 8: Transfer HEX data
-                lambda:self.exit_transfer(),                                          # Step 9: Exit transfer
-                lambda:self.transfer_signature(data_type = 'sbl'),                  # Step 10: Transfer signature
-                self.erase_memory,                                               # Step 11: Enter Flash mode
-                lambda:self.request_download(download_type = 'app'),                             # Step 12: Request download application
-                lambda:self.transfer_hex_data(data_type = 'app'),                                          # Step 13: Transfer application data
-                lambda:self.exit_transfer(),                                              # Step 14: Exit transfer
-                lambda:self.transfer_signature(data_type = 'app'),                                       # Step 15: Verify application signature
-                self.complete_flash_process,                                     # Step 16: Complete flash process
-                self.reset_ecu,                                                 # Step 17: Reset ECU
-                self.check_programming_status                                    # Step 18: Check programming status
+                lambda: self.program_request_only(bytes.fromhex('10 83')),
+                self.enter_extended_session,        
+                lambda: self.program_request_only(bytes.fromhex('85 82')),
+                lambda: self.program_request_only(bytes.fromhex('28 81 01')),
+                lambda: self.change_session(0x02),                                
+                self.security_access,                                          
+                self.write_f15a_identifier,                                       
+                lambda:self.request_download(download_type = 'sbl'),           
+                lambda:self.transfer_hex_data(data_type = 'sbl'),           
+                lambda:self.exit_transfer(),                                          
+                lambda:self.transfer_signature(data_type = 'sbl'),                 
+                self.erase_memory,                                             
+                lambda:self.request_download(download_type = 'app'),                            
+                lambda:self.transfer_hex_data(data_type = 'app'),                                         
+                lambda:self.exit_transfer(),                                            
+                lambda:self.transfer_signature(data_type = 'app'), 
+                self.complete_flash_process,               #3101FF01                     
+                self.reset_ecu,     #1101      
+                lambda: self.program_request_only(bytes.fromhex('10 83')),  #Extend Diag Session
+                self.program_testerpresent,
+                lambda: self.program_request_only(bytes.fromhex('28 80 01')),  #Enable Rx&Tx
+                lambda: self.program_request_only(bytes.fromhex('85 81')),      #Ctrl DTC setting ON
+                lambda: self.change_session(0x01),                           #Default Session     
+                self.fault_memory_clear,                                                                #Fault Memory CLear
             ]
             
             for i, step in enumerate(steps, 1):
@@ -489,6 +548,10 @@ class FlashingProcess:
                 if not step():
                     self.log(f"Step {i} failed, terminating flashing sequence")
                     return False
+                # 在ECU复位步骤之后添加4秒等待
+                if step == self.reset_ecu:
+                    self.log("Waiting 4 seconds after ECU reset...")
+                    time.sleep(4)
                     
             self.log("Flashing sequence completed")
             return True
@@ -520,27 +583,67 @@ class SecurityKeyAlgorithm:
             temp_key &= 0xFFFFFFFF
         return temp_key
 
-
-class SecurityKeyAlgorithmUP:
-    SECURITY_KKEY_L2 = 0x0000CDCA  # Level2算法密钥
-    SECURITY_KKEY_L4 = 0x00001D5C  # Level4算法密钥
+class SecurityKeyAlgorithmBDU:
+    # Constants definition
+    MIN_PAR = 0x92120273
+    EOR_PAR = 0x012200107
+    PLU_PAR = 0x05081829
+    
+    @staticmethod
+    def carry_sub(p1: int, p2: int) -> tuple:
+        """Perform subtraction with carry
+        
+        Args:
+            p1: First operand
+            p2: Second operand
+            
+        Returns:
+            tuple: (result, carry flag)
+        """
+        carry = 1 if p2 > p1 else 0
+        result = (p1 - p2) & 0xFFFFFFFF  # Ensure 32-bit result
+        return result, carry
 
     @staticmethod
-    def compute_level2(seed: int, keyk: int) -> int:
-        temp_key = (seed ^ keyk) & 0xFFFFFFFF
-        for _ in range(32):
-            if temp_key & 0x00000001:
-                temp_key = (temp_key >> 1) ^ seed
-            else:
-                temp_key = (temp_key >> 1) ^ keyk
-            temp_key &= 0xFFFFFFFF 
-        return temp_key
+    def compute_key(seed: bytes) -> int:
+        """Compute security access key from seed
+        
+        Args:
+            seed: 4-byte seed value
+            
+        Returns:
+            int: Computed key value
+        """
+        # Convert 4-byte seed to 32-bit integer
+        seed_bdu = ((seed[0] << 24) & 0xFF000000) | \
+                   ((seed[1] << 16) & 0x00FF0000) | \
+                   ((seed[2] << 8) & 0x0000FF00) | \
+                   (seed[3] & 0x000000FF)
+        
+        for i in range(7, 1, -1):
+            # Right rotate by 1 bit
+            seed_bdu = ((seed_bdu >> 1) | (seed_bdu << 31)) & 0xFFFFFFFF
+            
+            # Perform subtraction with carry
+            seed_bdu, carry = SecurityKeyAlgorithmBDU.carry_sub(seed_bdu, SecurityKeyAlgorithmBDU.MIN_PAR)
+            
+            # If carry occurred, left rotate by 1 bit
+            if carry != 0:
+                seed_bdu = ((seed_bdu << 1) | (seed_bdu >> 31)) & 0xFFFFFFFF
+            
+            # XOR operation
+            seed_bdu ^= SecurityKeyAlgorithmBDU.EOR_PAR
+            
+            # Right rotate by 1 bit
+            seed_bdu = ((seed_bdu >> 1) | (seed_bdu << 31)) & 0xFFFFFFFF
+            
+            # Addition operation
+            seed_bdu = (seed_bdu + SecurityKeyAlgorithmBDU.PLU_PAR) & 0xFFFFFFFF
+        
+        # Final left rotate by 1 bit
+        seed_bdu = ((seed_bdu << 1) | (seed_bdu >> 31)) & 0xFFFFFFFF
+        
+        return seed_bdu
 
-    @staticmethod
-    def compute_level4(seed: int, keyk: int) -> int:
-        temp_key = (seed ^ keyk) & 0xFFFFFFFF
-        for _ in range(32):
-            temp_key = ((temp_key << 7) | (temp_key >> 25)) & 0xFFFFFFFF
-            temp_key ^= keyk
-            temp_key &= 0xFFFFFFFF
-        return temp_key
+
+    

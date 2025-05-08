@@ -53,14 +53,14 @@ class ConnectionPack:
         self.default_canfd_params = "fd=True,bitrate=500000,data_bitrate=2000000,tseg1_abr=63,tseg2_abr=16,sjw_abr=16,sam_abr=1,tseg1_dbr=13,tseg2_dbr=6,sjw_dbr=6"
         
         self.baudrate_entry = ttk.Entry(self.baud_frame, width=50)
-        self.baudrate_entry.insert(0, self.default_can_params)
+        self.baudrate_entry.insert(0, self.default_canfd_params)
         self.baudrate_entry.pack(anchor=tk.W)
         
         # CAN-FD选项部分
         self.canfd_frame = ttk.Frame(self.controls_frame)
         self.canfd_frame.pack(side=tk.LEFT, padx=5)
         ttk.Label(self.canfd_frame, text="CAN-FD:").pack(anchor=tk.W)
-        self.canfd_var = tk.BooleanVar()
+        self.canfd_var = tk.BooleanVar(value=True)
         self.canfd_check = ttk.Checkbutton(self.canfd_frame, text="CAN-FD", 
                                          variable=self.canfd_var, 
                                          command=self.on_canfd_changed)

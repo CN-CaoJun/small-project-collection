@@ -43,7 +43,7 @@ class BootloaderPack:
             
             # 配置日志输出
             logging.basicConfig(
-                level=logging.DEBUG,
+                level=logging.WARN,
                 format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                 handlers=[
                     logging.FileHandler('bootloader_flash.log', encoding='utf-8'),  
@@ -118,16 +118,17 @@ class BootloaderPack:
             uds_config['data_identifiers'] = {
                 'default': '>H',
                 0x7705: FlexRawData(30),
-                0xF15A: FlexRawData(15),
+                0xF15A: FlexRawData(9),
                 0xF0F0: FlexRawData(1),
+                0x4611: FlexRawData(32),
             }
             # Modify timeout configuration
-            uds_config['p2_timeout'] = 1  # Increased to 2 seconds
-            uds_config['p2_star_timeout'] = 0.5  
-            uds_config['request_timeout'] = 1  # Increased total timeout
+            uds_config['p2_timeout'] = 5 # Increased to 2 seconds
+            uds_config['p2_star_timeout'] = 5
+            uds_config['request_timeout'] = 5  # Increased total timeout
             uds_config['session_timing'] = {
-                'p2_server_max': 3,  # Server maximum response time
-                'p2_star_server_max': 3  # Server maximum extended response time
+                'p2_server_max': 5,  # Server maximum response time
+                'p2_star_server_max': 5  # Server maximum extended response time
             }
             
             # Print UDS configuration information
@@ -240,20 +241,19 @@ class BootloaderPack:
             try:
                 if not hasattr(self, 'is_flashing') or not self.is_flashing:
                     with self.uds_client as client:
-                        client.conn.send(bytes.fromhex('3E 00'))
-                        response = client.conn.wait_frame(timeout=0.5)
-                        if response and response.hex().upper() == '7E00':
-                            self.uds_status_label.config(text="UDS Client: Online", foreground="green")
-                            
-                            # if self.ensure_trace_handler():
-                            #     self.trace_handler(f"TesterPresent response: {response.hex().upper()}")
-                        if response and response.hex().upper() != '7E00':
-                            if self.ensure_trace_handler():
-                                self.trace_handler(f"Unexpected TesterPresent response: {response.hex().upper()}")
+                        response = client.tester_present()
+                        if response:
+                            if response.positive:
+                                self.uds_status_label.config(text="UDS Client: Online", foreground="green")
+                        else: 
+                            self.uds_status_label.config(text="UDS Client: Offline", foreground="red")
+                        
             except Exception as e:
                 if self.ensure_trace_handler():
                     self.trace_handler(f"TesterPresent error: {str(e)}")
-            time.sleep(3.5)
+                    self.uds_status_label.config(text="UDS Client: Offline", foreground="red")
+            
+            time.sleep(3.0)
     
     def perform_ecu_reset(self):
         """Execute ECU reset"""
@@ -323,16 +323,6 @@ class BootloaderPack:
                 self.trace_handler(f"Error handling exception: {str(e)}")
 
     def get_version(self):
-        """Get ECU version number using UDS read data by identifier service
-        
-        This method reads DID 0x7705 which contains:
-        - Version information (10 bytes)
-        - Date information (12 bytes)
-        - Time information (8 bytes)
-        
-        Returns:
-            bool: True if version information was successfully retrieved, False otherwise
-        """
         try:
             if not self.uds_client:
                 if self.ensure_trace_handler():
@@ -341,45 +331,23 @@ class BootloaderPack:
                 
             with self.uds_client as client:
                 # Read DID 0x7705 using UDS service
-                response = client.read_data_by_identifier(0x7705)
+                response = client.read_data_by_identifier(0x4611)
                 
                 if response and response.service_data.values:
                     # Get raw data from response
-                    data = response.service_data.values[0x7705]
-                    
-                    # Parse data structure: [10 bytes version] [12 bytes date] [8 bytes time]
-                    version_data = data[0:10]    # Version info (10 bytes)
-                    date_data = data[10:22]      # Date data (12 bytes)
-                    time_data = data[22:30]      # Time data (8 bytes)
-                    
+                    data = response.service_data.values[0x4611]
                     # Convert version information to ASCII string
-                    version_str = version_data.decode('ascii', errors='ignore').strip()
-                    
-                    # Try to convert date information
-                    try:
-                        date_str = date_data.decode('ascii', errors='ignore').strip()
-                    except:
-                        date_str = "Date parsing failed"
-                        
-                    # Try to convert time information
-                    try:
-                        time_str = time_data.decode('ascii', errors='ignore').strip()
-                    except:
-                        time_str = "Time parsing failed"
-                    
+                    version_str = data.decode('ascii', errors='ignore').strip()
                     # Update version information label in UI
                     self.version_label.config(
                         text=f"Ver: {version_str}",
                         foreground="green"
                     )
-                    
                     # Log complete version information to trace handler
                     if self.ensure_trace_handler():
                         log_msg = (
                             f"Complete version information:\n"
                             f"  Version: {version_str}\n"
-                            f"  Date: {date_str} \n"
-                            f"  Time: {time_str} "
                         )
                         self.trace_handler(log_msg)
                     return True
@@ -460,13 +428,13 @@ class BootloaderPack:
         )
         self.uds_status_label.pack(side=tk.LEFT, padx=5)
         
-        # 添加ECU复位按钮
-        self.ecu_reset_btn = ttk.Button(
-            self.uds_control_frame,
-            text="ECU Reset",
-            command=self.perform_ecu_reset
-        )
-        self.ecu_reset_btn.pack(side=tk.LEFT, padx=(10, 5))
+        # # 添加ECU复位按钮
+        # self.ecu_reset_btn = ttk.Button(
+        #     self.uds_control_frame,
+        #     text="ECU Reset",
+        #     command=self.perform_ecu_reset
+        # )
+        # self.ecu_reset_btn.pack(side=tk.LEFT, padx=(10, 5))
         
         # 添加开始刷写按钮
         self.start_flash_btn = ttk.Button(
