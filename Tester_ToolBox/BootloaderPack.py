@@ -41,15 +41,15 @@ class BootloaderPack:
                     self.trace_handler("Error: CAN bus not initialized")
                 return False
             
-            # 配置日志输出
-            logging.basicConfig(
-                level=logging.WARN,
-                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                handlers=[
-                    logging.FileHandler('bootloader_flash.log', encoding='utf-8'),  
-                    logging.StreamHandler()  
-                ]
-            )
+            # logging.basicConfig(
+            #     level=logging.WARN,
+            #     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            #     handlers=[
+            #         logging.FileHandler('bootloader_flash.log', encoding='utf-8'),  
+            #         logging.StreamHandler()  
+            #     ]
+            # )
+            
             # Configure ISO-TP parameters
             if isfd:
                 isotp_params = {

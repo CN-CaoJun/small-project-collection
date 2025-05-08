@@ -21,6 +21,11 @@ class MainWindow(tk.Tk):
         
         self.title("Diagnostic ToolBox")
         self.geometry("750x800")
+        
+        # 设置图标
+        icon_path = os.path.join(os.path.dirname(__file__), 'assets', 'icon.ico')
+        if os.path.exists(icon_path):
+            self.iconbitmap(icon_path)
 
         # create main frame
         self.main_frame = ttk.Frame(self)

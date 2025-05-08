@@ -11,6 +11,7 @@ shared_analysis = Analysis(
         ('reference_modules/python-can', 'reference_modules/python-can'),
         ('reference_modules/python-can-isotp', 'reference_modules/python-can-isotp'),
         ('reference_modules/python-udsoncan', 'reference_modules/python-udsoncan'),
+        ('assets/icon.ico', 'assets')
     ],
     hiddenimports=[
         'can',
@@ -48,12 +49,14 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    version='version.txt',  # 添加这一行
+    icon='assets/icon.ico'
 )
 
 # 收集所有依赖项
