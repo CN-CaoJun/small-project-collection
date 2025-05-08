@@ -35,7 +35,7 @@ class MainWindow(tk.Tk):
         self.diagnostic_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Bootloader Pack 
-        self.bootloader_frame = ttk.LabelFrame(self.main_frame, text="IMS Bootloader")
+        self.bootloader_frame = ttk.LabelFrame(self.main_frame, text="BDU Bootloader")
         self.bootloader_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Trace Pack

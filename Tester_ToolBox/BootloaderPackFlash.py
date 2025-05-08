@@ -187,9 +187,9 @@ class FlashingProcess:
                     return False
 
                 memory_location = MemoryLocation(
-                    address=addr,
+                    address=0x01,
                     memorysize=size,
-                    address_format=32,
+                    address_format=8,
                     memorysize_format=32
                 )
                 
@@ -446,13 +446,13 @@ class FlashingProcess:
         self.firmware_folder = firmware_folder
         self.log("Start executing flashing sequence...")
         
-        sbl_sig_path = os.path.join(firmware_folder, 'gen6nu_sbl_sign.bin')
-        app_sig_path = os.path.join(firmware_folder, 'gen6nu_sign.bin')
+        sbl_sig_path = os.path.join(firmware_folder, 'FlashDrv_signature.bin')
+        app_sig_path = os.path.join(firmware_folder, 'FAW_Volksagen-BDU_HSM_BM_APP_signature.bin')
         self.sbl_sig_data = self.read_signature_file(sbl_sig_path)
         self.app_sig_data = self.read_signature_file(app_sig_path)
         
-        sbl_path = os.path.join(firmware_folder, 'gen6nu_sbl.hex')
-        app_path = os.path.join(firmware_folder, 'gen6nu.hex')
+        sbl_path = os.path.join(firmware_folder, 'FlashDrv.hex')
+        app_path = os.path.join(firmware_folder, 'FAW_Volksagen-BDU_HSM_BM_APP.hex')
         self.sbl_data, self.sbl_start_addr, self.sbl_data_length = self.read_hex_file(sbl_path)
         if not self.sbl_data:
             self.log("Failed to read SBL HEX file")

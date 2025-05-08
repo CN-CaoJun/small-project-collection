@@ -150,9 +150,9 @@ class ISOTPLayer:
         :param rxid: Reception ID
         :param is_fd: Whether to use CANFD
         """
-        # 配置日志
+        
         logging.basicConfig(
-            level=logging.DEBUG,
+            level=logging.WARNING,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
                 logging.FileHandler('isotp_layer.log', encoding='utf-8'),
@@ -354,8 +354,8 @@ def main():
         isotp_layer = ISOTPLayer(
             bus=bus,
             notifier=notifier,
-            txid=0x759,
-            rxid=0x749,
+            txid=0x738,
+            rxid=0x730,
             is_fd=can_factory.is_fd  # Use CAN bus FD setting
         )
         

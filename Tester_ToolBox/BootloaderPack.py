@@ -46,8 +46,8 @@ class BootloaderPack:
                 level=logging.DEBUG,
                 format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                 handlers=[
-                    logging.FileHandler('bootloader_flash.log', encoding='utf-8'),  # 文件处理器
-                    logging.StreamHandler()  # 控制台处理器
+                    logging.FileHandler('bootloader_flash.log', encoding='utf-8'),  
+                    logging.StreamHandler()  
                 ]
             )
             # Configure ISO-TP parameters
@@ -98,8 +98,8 @@ class BootloaderPack:
             # Configure ISO-TP address
             tp_addr = isotp.Address(
                 isotp.AddressingMode.Normal_11bits,
-                txid=0x749,  # Transmit ID
-                rxid=0x759   # Receive ID
+                txid=0x730,  # Transmit ID
+                rxid=0x738   # Receive ID
             )
             
             # Create ISO-TP stack
@@ -171,7 +171,7 @@ class BootloaderPack:
         folder_selected = filedialog.askdirectory()
         if folder_selected:
             self.folder_path.set(folder_selected)
-            required_files = {'gen6nu.hex', 'gen6nu_sbl.hex', 'gen6nu_sbl_sign.bin', 'gen6nu_sign.bin'}
+            required_files = {'FlashDrv.hex', 'FAW_Volksagen-BDU_HSM_BM_APP.hex', 'FlashDrv_signature.bin', 'FAW_Volksagen-BDU_HSM_BM_APP_signature.bin'}
             existing_files = set(os.listdir(folder_selected))
             missing_files = required_files - existing_files
             
@@ -190,7 +190,7 @@ class BootloaderPack:
                             foreground="red"
                         )
                         self.trace_handler(f"File check FAILED - Missing files: {', '.join(missing_files)}")
-                        self.start_flash_btn.config(state=tk.DISABLED)  # 禁用按钮
+                        self.start_flash_btn.config(state=tk.DISABLED)  
                 else:
                     print("Warning: Trace handler not available")
             except Exception as e:
