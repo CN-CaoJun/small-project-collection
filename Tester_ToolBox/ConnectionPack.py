@@ -60,7 +60,7 @@ class ConnectionPack:
         self.canfd_frame = ttk.Frame(self.controls_frame)
         self.canfd_frame.pack(side=tk.LEFT, padx=5)
         ttk.Label(self.canfd_frame, text="CAN-FD:").pack(anchor=tk.W)
-        self.canfd_var = tk.BooleanVar()
+        self.canfd_var = tk.BooleanVar(value=False)
         self.canfd_check = ttk.Checkbutton(self.canfd_frame, text="CAN-FD", 
                                          variable=self.canfd_var, 
                                          command=self.on_canfd_changed)

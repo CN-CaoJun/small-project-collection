@@ -21,6 +21,11 @@ class MainWindow(tk.Tk):
         
         self.title("Diagnostic ToolBox")
         self.geometry("750x800")
+        
+        # 设置图标
+        icon_path = os.path.join(os.path.dirname(__file__), 'assets', 'icon.ico')
+        if os.path.exists(icon_path):
+            self.iconbitmap(icon_path)
 
         # create main frame
         self.main_frame = ttk.Frame(self)
@@ -35,7 +40,7 @@ class MainWindow(tk.Tk):
         self.diagnostic_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Bootloader Pack 
-        self.bootloader_frame = ttk.LabelFrame(self.main_frame, text="IMS Bootloader")
+        self.bootloader_frame = ttk.LabelFrame(self.main_frame, text="BDU Bootloader")
         self.bootloader_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Trace Pack

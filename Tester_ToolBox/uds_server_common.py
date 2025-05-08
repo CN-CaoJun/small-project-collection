@@ -6,10 +6,12 @@ sys.path.insert(0, os.path.abspath("reference_modules/python-can-isotp"))
 sys.path.insert(0, os.path.abspath("reference_modules/python-udsoncan"))
 
 import can
+from can.interfaces.vector import canlib, xlclass, xldefine
 import isotp
 import time
 import json
 import threading
+import logging
 
 class CANBusFactory:
     """CAN Bus Factory class for creating different types of CAN interfaces"""
@@ -35,6 +37,8 @@ class CANBusFactory:
             self._create_pcan_bus()
         elif self.channel_type == 'vector':
             self._create_vector_bus()
+        elif self.channel_type == 'virtualvector':
+            self._create_virtual_vector_bus()
         elif self.channel_type == 'slcan':
             self._create_slcan_bus()
         elif self.channel_type == 'socketcan':
@@ -85,6 +89,37 @@ class CANBusFactory:
         except Exception as e:
             print(f"Failed to initialize Vector bus: {e}")
             raise
+    
+    def _create_virtual_vector_bus(self):
+        """Create Vector bus instance"""
+        try:
+            if self.is_fd:
+                self.can_bus = canlib.VectorBus(
+                    channel = 0,
+                    fd=True,
+                    bitrate=500000,
+                    data_bitrate=2000000,
+                    tseg1_abr=63,
+                    tseg2_abr=16,
+                    sjw_abr=16,
+                    sam_abr=1,
+                    tseg1_dbr=13,
+                    tseg2_dbr=6,
+                    sjw_dbr=6,
+                )
+            else:
+                self.can_bus = canlib.VectorBus(
+                        channel = 0,  
+                        fd=False,
+                        bitrate=500000,
+                        tseg1_abr=63,
+                        tseg2_abr=16,
+                        sjw_abr=16)
+            print("[CANBUS] Default choose Virtual Channel 1")  
+            print(f"[CANBUS] Virtual Vector bus initialized successfully in {'CANFD' if self.is_fd else 'CAN'} mode.")
+        except Exception as e:
+            print(f"Failed to initialize Vector bus: {e}")
+            raise
 
     def _create_slcan_bus(self):
         """Create SLCAN bus instance"""
@@ -106,7 +141,7 @@ class CANBusFactory:
 
 class ISOTPLayer:
     """ISOTP protocol layer wrapper"""
-    def __init__(self, bus, notifier, txid, rxid, is_fd=False):
+    def __init__(self, bus, notifier, txid, rxid, is_fd):
         """
         Initialize ISOTP layer
         :param bus: CAN bus instance
@@ -115,23 +150,61 @@ class ISOTPLayer:
         :param rxid: Reception ID
         :param is_fd: Whether to use CANFD
         """
-        self.params = {
-            'stmin': 0,
-            'blocksize': 0,
-            'override_receiver_stmin': None,
-            'wftmax': 4,
-            'tx_data_length': 8,
-            'tx_data_min_length':8,
-            'tx_padding': 0x00,
-            'rx_flowcontrol_timeout': 1000,
-            'rx_consecutive_frame_timeout': 100,
-            'can_fd': False,
-            'max_frame_size': 4095,
-            'bitrate_switch': False,
-            'rate_limit_enable': False,
-            'listen_mode': False,
-            'blocking_send': False   
-        }
+        
+        logging.basicConfig(
+            level=logging.WARNING,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler('isotp_layer.log', encoding='utf-8'),
+                logging.StreamHandler()
+            ]
+        )
+        
+        # Configure ISOTP parameters based on CAN type
+        if is_fd:
+            self.params = {
+                'stmin': 0,
+                'blocksize': 0,
+                'override_receiver_stmin': None,
+                'wftmax': 4,
+                'tx_data_length': 64,     # 增加到64字节以支持CANFD
+                'tx_data_min_length': 8,
+                'tx_padding': 0x00,
+                'rx_flowcontrol_timeout': 1000,
+                'rx_consecutive_frame_timeout': 100,
+                'can_fd': True,           # 启用CANFD
+                'max_frame_size': 4095,
+                'bitrate_switch': False,
+                'rate_limit_enable': False,
+                'listen_mode': False,
+                'blocking_send': False   
+            }
+        else:
+            self.params = {
+                'stmin': 0,
+                'blocksize': 0,
+                'override_receiver_stmin': None,
+                'wftmax': 4,
+                'tx_data_length': 8,      # 标准CAN使用8字节
+                'tx_data_min_length': 8,
+                'tx_padding': 0x00,
+                'rx_flowcontrol_timeout': 1000,
+                'rx_consecutive_frame_timeout': 100,
+                'can_fd': False,          # 禁用CANFD
+                'max_frame_size': 4095,
+                'bitrate_switch': False,
+                'rate_limit_enable': False,
+                'listen_mode': False,
+                'blocking_send': False   
+            }
+
+        # Print ISOTP layer initialization status
+        print(f"[ISOTP] Initializing {'CANFD' if is_fd else 'Standard CAN'} transport layer")
+        print(f"[ISOTP] TX ID: 0x{txid:03X}, RX ID: 0x{rxid:03X}")
+        print(f"[ISOTP] Parameters:")
+        print(f"[ISOTP]   - Data Length: {self.params['tx_data_length']} bytes")
+        print(f"[ISOTP]   - Flow Control Timeout: {self.params['rx_flowcontrol_timeout']} ms")
+        print(f"[ISOTP]   - Consecutive Frame Timeout: {self.params['rx_consecutive_frame_timeout']} ms")
 
         self.tp_addr = isotp.Address(
             isotp.AddressingMode.Normal_11bits,
@@ -169,6 +242,7 @@ class Config:
         try:
             with open(config_file, "r") as fd:
                 self.config = json.load(fd)
+                print(f"[Config] Successfully loaded test case file: {config_file}")  # Add success message
                 return self.config
         except:
             print("test case file parse failed")
@@ -181,7 +255,7 @@ class Config:
 
 class UDSResponder:
     """UDS Response Handler"""
-    def __init__(self, test_case_file='IMS_response.json'):
+    def __init__(self, test_case_file='BDU_response.json'):
         """
         Initialize UDS responder
         :param test_case_file: Test case file
@@ -211,7 +285,7 @@ class UDSResponder:
         """Receiving loop"""
         while self.running:
             try:
-                payload = self.isotp_layer.receive(timeout=0.01)
+                payload = self.isotp_layer.receive(timeout=0.50)
                 if payload:
                     response = self.process_request(payload)
                     self.isotp_layer.send(response)
@@ -272,17 +346,19 @@ def main():
     try:
         # Create CAN bus instance
         # can_factory = CANBusFactory(channel_type='vector', is_fd=False)
-        can_factory = CANBusFactory(channel_type='socketcan', is_fd=False)
+        can_factory = CANBusFactory(channel_type='virtualvector', is_fd=True)
+        # can_factory = CANBusFactory(channel_type='virtualvector', is_fd=False)
         bus, notifier = can_factory.create_bus()
 
-        # Create ISOTP layer
+        # Create ISOTP layer - Use the same FD setting as CAN bus
         isotp_layer = ISOTPLayer(
             bus=bus,
             notifier=notifier,
-            txid=0x759,
-            rxid=0x749,
-            is_fd=False
+            txid=0x738,
+            rxid=0x730,
+            is_fd=can_factory.is_fd  # Use CAN bus FD setting
         )
+        
         isotp_layer.start()
 
         # Create UDS responder and start receiving

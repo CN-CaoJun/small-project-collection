@@ -1,15 +1,7 @@
 {
-    "IMS-Client": {
-        "TXID": "0x749",
-        "RXID": "0x759"
-    },
     "BDU-Client": {
         "TXID": "0x730",
         "RXID": "0x738"
-    },
-    "IMS-Server": {
-        "TXID": "0x759",
-        "RXID": "0x749"
     },
     "BDU-Server": {
         "TXID": "0x738",
