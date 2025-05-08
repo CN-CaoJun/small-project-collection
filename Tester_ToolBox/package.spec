@@ -2,7 +2,6 @@
 
 block_cipher = None
 
-# 定义共享的分析配置
 shared_analysis = Analysis(
     ['MainUI.py'],
     pathex=[],
@@ -23,7 +22,7 @@ shared_analysis = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        'matplotlib',  # 排除不需要的大型库
+        'matplotlib',  
         'numpy',
         'pandas',
         'scipy',
@@ -35,15 +34,13 @@ shared_analysis = Analysis(
     noarchive=False,
 )
 
-# 创建基础PYZ
 pyz = PYZ(shared_analysis.pure, shared_analysis.zipped_data, cipher=block_cipher)
 
-# 主程序
 exe = EXE(
     pyz,
     shared_analysis.scripts,
-    [],  # 不包含二进制文件
-    exclude_binaries=True,  # 排除二进制文件
+    [], 
+    exclude_binaries=True,  
     name='DiagnosticToolBox',
     debug=False,
     bootloader_ignore_signals=False,
@@ -55,11 +52,10 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version='version.txt',  # 添加这一行
+    version='version.txt', 
     icon='assets/icon.ico'
 )
 
-# 收集所有依赖项
 coll = COLLECT(
     exe,
     shared_analysis.binaries,
