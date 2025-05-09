@@ -1,12 +1,12 @@
 import json
 import os
 
-DEFAULT_ECU_MAP = {
-    'None': {'RXID': 0x759, 'TXID': 0x749}
-}
-
 READ_ECU_MAP = {
-    'None': {'RXID': 0x759, 'TXID': 0x749}
+    'BDU-CLient': 
+    {
+        'RXID': '0x738',
+        'TXID': '0x730'
+    }
 }
 
 class ECUMapReader:

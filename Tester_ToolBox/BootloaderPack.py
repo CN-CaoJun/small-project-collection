@@ -28,6 +28,7 @@ class BootloaderPack:
         self.parent = parent
         self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
         self.uds_client = None
+        self.flash_config = {}
         self.create_widgets()
     
     def init_uds_client(self):
@@ -166,47 +167,6 @@ class BootloaderPack:
             self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
         return self.trace_handler is not None
 
-    def select_firmware_folder(self):
-        """Handle folder selection"""
-        from tkinter import filedialog
-        folder_selected = filedialog.askdirectory()
-        if folder_selected:
-            self.folder_path.set(folder_selected)
-            required_files = {'FlashDrv.hex', 'FAW_Volksagen-BDU_HSM_BM_APP.hex', 'FlashDrv_signature.bin', 'FAW_Volksagen-BDU_HSM_BM_APP_signature.bin'}
-            existing_files = set(os.listdir(folder_selected))
-            missing_files = required_files - existing_files
-            
-            try:
-                if self.ensure_trace_handler():
-                    self.trace_handler(f"Selected firmware folder: {folder_selected}")
-                    
-                    # Update status label and Start Flashing button state
-                    if not missing_files:
-                        self.status_label.config(text="File Check PASS", foreground="green")
-                        self.trace_handler("File check PASS - All required files found")
-                        self.start_flash_btn.config(state=tk.NORMAL)  # 启用按钮
-                    else:
-                        self.status_label.config(
-                            text=f"File Check FAILED\nMissing: {', '.join(missing_files)}",
-                            foreground="red"
-                        )
-                        self.trace_handler(f"File check FAILED - Missing files: {', '.join(missing_files)}")
-                        self.start_flash_btn.config(state=tk.DISABLED)  
-                else:
-                    print("Warning: Trace handler not available")
-            except Exception as e:
-                print(f"Error in trace handling: {str(e)}")
-                # Ensure status label and button state are still updated
-                if not missing_files:
-                    self.status_label.config(text="File Check PASS", foreground="green")
-                    self.start_flash_btn.config(state=tk.NORMAL)  # 启用按钮
-                else:
-                    self.status_label.config(
-                        text=f"File Check FAILED\nMissing: {', '.join(missing_files)}",
-                        foreground="red"
-                    )
-                    self.start_flash_btn.config(state=tk.DISABLED)  # 禁用按钮
-
     def toggle_uds_client(self):
         """Toggle UDS client connection status"""
         if self.uds_client is None:
@@ -281,22 +241,24 @@ class BootloaderPack:
         """Start flashing process"""
         def flash_thread():
             try:
-                # 设置刷写标志，暂停TesterPresent发送
                 self.is_flashing = True
+                self.uds_status_label.config(text="UDS Client: Online", foreground="green")
                 # Immediately disable button (main thread operation)
                 self.start_flash_btn.config(state=tk.DISABLED)
                 flashing = FlashingProcess(self.uds_client, self.trace_handler)
-                success = flashing.execute_flashing_sequence(self.folder_path.get())
+                success = flashing.execute_flashing_sequence(
+                    sbl_hex_path=self.flash_config['sbl_hex'],
+                    app_hex_path=self.flash_config['app_hex']
+                )
+                self.status_label.config(text="Flashing Ongoing", foreground="green")
                 self.update_flash_status(success)
             except Exception as e:
                 self.show_flash_error(str(e))
-            finally:  
-                # 清除刷写标志，恢复TesterPresent发送
+            finally:
                 self.is_flashing = False
-                # Restore button state (main thread operation)
+                self.uds_status_label.config(text="Wait TesterPresent", foreground="green")
                 self.start_flash_btn.config(state=tk.NORMAL)
 
-        # Start thread directly
         threading.Thread(target=flash_thread, daemon=True).start()
 
     def update_flash_status(self, success):
@@ -315,7 +277,7 @@ class BootloaderPack:
     def show_flash_error(self, error):
         """Display error message"""
         try:
-            self.status_label.config(text=f"Error: {error}", foreground="red")
+            self.status_label.config(text=f"Unexpected Err", foreground="red")
             if self.ensure_trace_handler():
                 self.trace_handler(f"Flashing error: {error}")
         except Exception as e:
@@ -340,7 +302,7 @@ class BootloaderPack:
                     version_str = data.decode('ascii', errors='ignore').strip()
                     # Update version information label in UI
                     self.version_label.config(
-                        text=f"Ver: {version_str}",
+                        text=f"Ver: {version_str[:12]}",
                         foreground="green"
                     )
                     # Log complete version information to trace handler
@@ -372,42 +334,86 @@ class BootloaderPack:
             if self.ensure_trace_handler():
                 self.trace_handler(err_msg)
             return False
-
+    def select_file(self, file_type):
+        from tkinter import filedialog
+        file_path = filedialog.askopenfilename(
+            title=f"选择{file_type.upper()}文件",
+            filetypes=[("HEX files", "*.hex"), ("All files", "*.*")]
+        )
+        if file_path:
+            if file_type == 'sbl':
+                self.sbl_path_label.config(text=f"SBL: {os.path.basename(file_path)}", foreground="green")
+                self.flash_config['sbl_hex'] = file_path
+            else:
+                self.app_path_label.config(text=f"APP: {os.path.basename(file_path)}", foreground="green")
+                self.flash_config['app_hex'] = file_path
+            
+            if 'sbl_hex' in self.flash_config and 'app_hex' in self.flash_config:
+                if os.path.exists(self.flash_config['sbl_hex']) and os.path.exists(self.flash_config['app_hex']):
+                    if self.ensure_trace_handler():
+                        self.trace_handler("Config check PASS - All required files found")
+                    self.start_flash_btn.config(state=tk.NORMAL)
+                    return
+            
+            self.start_flash_btn.config(state=tk.DISABLED)
     def create_widgets(self):
-        # 主框架容器
         self.bootloader_frame = ttk.LabelFrame(self.parent, text="Operation")
         self.bootloader_frame.pack(fill=tk.X, padx=5, pady=5, expand=False)
 
-        # 添加文件夹选择控件
-        self.folder_selector_frame = ttk.Frame(self.bootloader_frame)
-        self.folder_selector_frame.pack(fill=tk.X, padx=5, pady=5)
-
-        # 文件夹选择按钮
-        self.select_btn = ttk.Button(
-            self.folder_selector_frame,
-            text="Select BIN folder",
-            command=self.select_firmware_folder
-        )
-        self.select_btn.pack(side=tk.LEFT, padx=(0, 5))
-
-        # 路径显示框
-        self.folder_path = tk.StringVar()
-        self.path_entry = ttk.Entry(
-            self.folder_selector_frame,
-            textvariable=self.folder_path,
-            state='readonly',
-            width=50
-        )
-        self.path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # Create file path display frame
+        self.file_frame = ttk.Frame(self.bootloader_frame)
+        self.file_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # 在路径显示框下添加状态标签
-        self.status_label = ttk.Label(
-            self.folder_selector_frame,
-            text="File Check: Not Performed",
-            font=('Arial', 9)
+        # SBL file path display frame
+        self.sbl_frame = ttk.Frame(self.file_frame)
+        self.sbl_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        self.sbl_label = ttk.Label(self.sbl_frame, text="SBL File: ")
+        self.sbl_label.pack(side=tk.LEFT, padx=(0,5))
+        
+        self.sbl_path_label = ttk.Label(
+            self.sbl_frame, 
+            text="N/A",
+            relief="solid",  # 添加边框
+            borderwidth=1,   # 设置边框宽度
+            width=30,        # 设置固定宽度
+            anchor="w",      # 文本左对齐
+            padding=(5,2)    # 内边距
         )
-        self.status_label.pack(side=tk.LEFT, padx=5)
-
+        self.sbl_path_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        self.sbl_select_btn = ttk.Button(
+            self.sbl_frame,
+            text="Select SBL",
+            command=lambda: self.select_file('sbl')
+        )
+        self.sbl_select_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # APP file path display frame
+        self.app_frame = ttk.Frame(self.file_frame)
+        self.app_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        self.app_label = ttk.Label(self.app_frame, text="APP File:")
+        self.app_label.pack(side=tk.LEFT, padx=(0,5))
+        
+        self.app_path_label = ttk.Label(
+            self.app_frame, 
+            text="N/A",
+            relief="solid",  # 添加边框
+            borderwidth=1,   # 设置边框宽度
+            width=30,        # 设置固定宽度
+            anchor="w",      # 文本左对齐
+            padding=(5,2)    # 内边距
+        )
+        self.app_path_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        self.app_select_btn = ttk.Button(
+            self.app_frame,
+            text="Select APP",
+            command=lambda: self.select_file('app')
+        )
+        self.app_select_btn.pack(side=tk.RIGHT, padx=5)
+        
         # 添加UDS初始化控制框架
         self.uds_control_frame = ttk.Frame(self.bootloader_frame)
         self.uds_control_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -445,6 +451,15 @@ class BootloaderPack:
         )
         self.start_flash_btn.pack(side=tk.LEFT, padx=(10, 5))
         
+        # 添加刷写状态标签
+        self.status_label = ttk.Label(
+            self.uds_control_frame,
+            text="Status: Ready",
+            font=('Arial', 9),
+            foreground="black"
+        )
+        self.status_label.pack(side=tk.LEFT, padx=(5, 10))
+        
         # 在现有按钮后添加版本获取按钮
         self.get_version_btn = ttk.Button(
             self.uds_control_frame,
@@ -480,3 +495,4 @@ class FlexRawData(udsoncan.DidCodec):
         return payload  # Return raw data directly
     def __len__(self):
         return self.data_length
+

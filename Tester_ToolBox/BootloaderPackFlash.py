@@ -22,6 +22,10 @@ from typing import Optional, List, Union, Tuple
 from udsoncan import Response
 from udsoncan import MemoryLocation
 
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+
 class FlashingProcess:
     def __init__(self, uds_client: Client, trace_handler=None):
         self.client = uds_client
@@ -493,27 +497,40 @@ class FlashingProcess:
         except Exception as e:
             self.log(f"Fault memory clear exception: {str(e)}")
             return False
-    def execute_flashing_sequence(self, firmware_folder: str) -> bool:
-        """Execute complete flashing sequence"""
-        self.firmware_folder = firmware_folder
+    def execute_flashing_sequence(self, sbl_hex_path: str, app_hex_path: str) -> bool:
+
         self.log("Start executing flashing sequence...")
         
-        sbl_sig_path = os.path.join(firmware_folder, 'FlashDrv_signature.bin')
-        app_sig_path = os.path.join(firmware_folder, 'FAW_Volksagen-BDU_HSM_BM_APP_signature.bin')
-        self.sbl_sig_data = self.read_signature_file(sbl_sig_path)
-        self.app_sig_data = self.read_signature_file(app_sig_path)
-        
-        sbl_path = os.path.join(firmware_folder, 'FlashDrv.hex')
-        app_path = os.path.join(firmware_folder, 'FAW_Volksagen-BDU_HSM_BM_APP.hex')
-        self.sbl_data, self.sbl_start_addr, self.sbl_data_length = self.read_hex_file(sbl_path)
+        self.sbl_data, self.sbl_start_addr, self.sbl_data_length = self.read_hex_file(sbl_hex_path)
         if not self.sbl_data:
             self.log("Failed to read SBL HEX file")
             return False
             
-        self.app_data, self.app_start_addr, self.app_data_length = self.read_hex_file(app_path) 
+        self.app_data, self.app_start_addr, self.app_data_length = self.read_hex_file(app_hex_path) 
         if not self.app_data:
             self.log("Failed to read APP HEX file")
             return False
+        
+        # Private key string for ECDSA signature generation
+        private_key_str = 'D6A27848893345586DB67D1954D1A4CC753C5AA15181C2C81DAD1F1D413F7B4C'
+        # Derive private key from hex string using SECP256R1 curve
+        private_key = ec.derive_private_key(int(private_key_str, 16), ec.SECP256R1())
+        
+        # Generate ECDSA signature for SBL data using SHA256
+        signature = private_key.sign(self.sbl_data, ec.ECDSA(hashes.SHA256()))
+        # Decode signature into r and s components
+        r, s = decode_dss_signature(signature)
+        # Combine r and s components into 64-byte signature data
+        self.sbl_sig_data = r.to_bytes(32, 'big') + s.to_bytes(32, 'big')
+        print(f"SBL signature data: {self.sbl_sig_data.hex().upper()}")
+        
+        # Generate ECDSA signature for APP data using SHA256
+        signature = private_key.sign(self.app_data, ec.ECDSA(hashes.SHA256()))
+        # Decode signature into r and s components
+        r, s = decode_dss_signature(signature)
+        # Combine r and s components into 64-byte signature data
+        self.app_sig_data = r.to_bytes(32, 'big') + s.to_bytes(32, 'big')
+        print(f"APP signature data: {self.app_sig_data.hex().upper()}")
         
         try:
             steps = [
@@ -548,7 +565,6 @@ class FlashingProcess:
                 if not step():
                     self.log(f"Step {i} failed, terminating flashing sequence")
                     return False
-                # 在ECU复位步骤之后添加4秒等待
                 if step == self.reset_ecu:
                     self.log("Waiting 4 seconds after ECU reset...")
                     time.sleep(4)
