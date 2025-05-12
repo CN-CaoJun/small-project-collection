@@ -19,7 +19,7 @@ class MainWindow(tk.Tk):
     def __init__(self):
         super().__init__()
         
-        self.title("Diagnostic ToolBox")
+        self.title("BDU Diagnostic ToolBox V0.0.1")
         self.geometry("750x800")
         
         # 设置图标

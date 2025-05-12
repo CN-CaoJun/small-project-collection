@@ -22,6 +22,7 @@ class ConnectionPack:
         self.channel_configs = {}
         # 创建控件
         self.fdcan = False
+        self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
         self.create_widgets()
         
     def create_widgets(self):
@@ -111,9 +112,9 @@ class ConnectionPack:
                                     'type': 'socketcan',
                                     'channel': name
                                 }
-                                print(f"Found SocketCAN interface: {name}")
+                                self.log(f"Found SocketCAN interface: {name}")
             except Exception as e:
-                print(f"SocketCAN scan error: {str(e)}")
+                self.log(f"SocketCAN scan error: {str(e)}")
 
             # Scan Vector devices
             if canlib.xldriver is not None:
@@ -121,17 +122,17 @@ class ConnectionPack:
                     canlib.xldriver.xlOpenDriver()
                     vector_configs = canlib.get_channel_configs()
                     
-                    # print("\nVector设备配置信息:")
+                    # self.log("\nVector设备配置信息:")
                     # for config in vector_configs:
-                    #     print(f"通道名称: {config.name}")
-                    #     print(f"硬件通道: {config.hw_channel}")
-                    #     print(f"硬件类型: {config.hw_type}")
-                    #     print(f"硬件索引: {config.hw_index}")
-                    #     print(f"通道掩码: {config.channel_mask}")
-                    #     print("------------------------")
+                    #     self.log(f"通道名称: {config.name}")
+                    #     self.log(f"硬件通道: {config.hw_channel}")
+                    #     self.log(f"硬件类型: {config.hw_type}")
+                    #     self.log(f"硬件索引: {config.hw_index}")
+                    #     self.log(f"通道掩码: {config.channel_mask}")
+                    #     self.log("------------------------")
                     
                     for config in vector_configs:
-                        channel_name = f"Vector: {config.name}"
+                        channel_name = f"{config.serial_number}: {config.name}"
                         channel_list.append(channel_name)
                         # Store device type and configuration
                         self.channel_configs[channel_name] = {
@@ -140,7 +141,7 @@ class ConnectionPack:
                             'hw_channel': config.hw_channel
                         }
                 except Exception as e:
-                    print(f"Vector scan error: {str(e)}")
+                    self.log(f"Vector scan error: {str(e)}")
                 finally:
                     canlib.xldriver.xlCloseDriver()
 
@@ -170,16 +171,15 @@ class ConnectionPack:
                                 'features': fd_support
                             }
             except Exception as e:
-                print(f"PCAN scan error: {str(e)}")
+                self.log(f"PCAN scan error: {str(e)}")
 
-            # 新增SLCAN串口扫描
             try:
                 from can.interfaces import slcan
                 from serial.tools.list_ports import comports
                 
                 # 扫描所有可用串口
                 for port in comports():
-                    print(f"Found port: {port.device}, location: {port.location}")
+                    self.log(f"Found port: {port.device}, location: {port.location}")
                     if port.location is not None:
                         channel_name = f"SLCAN: {port.device}"
                         channel_list.append(channel_name)
@@ -190,12 +190,12 @@ class ConnectionPack:
                             'hwid': port.hwid
                         }
                         # 新增调试信息打印
-                        print(f"SLCAN设备信息 - 端口: {port.device}")
-                        print(f"描述: {port.description}")
-                        print(f"硬件ID: {port.hwid}\n")
+                        self.log(f"SLCAN设备信息 - 端口: {port.device}")
+                        self.log(f"描述: {port.description}")
+                        self.log(f"硬件ID: {port.hwid}\n")
                         
             except Exception as e:
-                print(f"SLCAN scan error: {str(e)}")
+                self.log(f"SLCAN scan error: {str(e)}")
 
             # Update UI
             if channel_list:
@@ -264,7 +264,7 @@ class ConnectionPack:
             if self.can_bus:
                 self.can_bus.shutdown()
             
-            print(f"channel_config['type']: {channel_config['type']}")
+            self.log(f"channel_config['type']: {channel_config['type']}")
             
             if channel_config['type'] == 'pcan':
                 from can.interfaces.pcan import PcanBus
@@ -295,7 +295,7 @@ class ConnectionPack:
                     bitrate = 500000,
                 )
             elif channel_config['type'] == 'socketcan':
-                print(f"channel_config['channel']: {channel_config['channel']}")
+                self.log(f"channel_config['channel']: {channel_config['channel']}")
                 self.can_bus = can.Bus(
                     interface='socketcan',
                     channel=channel_config['channel'],
@@ -308,7 +308,6 @@ class ConnectionPack:
             self.baudrate_entry.configure(state='disabled')
             self.canfd_check.configure(state='disabled')
             
-            # print(f"CAN channel initialized successfully: {selected_channel} (ID: {channel_config['hw_channel'] if channel_config['type'] == 'vector' else channel_config['handle']:02X})")  # 修改这里的属性访问方式
             
         except Exception as e:
             self.show_error(f"Failed to initialize CAN channel: {str(e)}")
@@ -326,7 +325,7 @@ class ConnectionPack:
             self.baudrate_entry.configure(state='normal')
             self.canfd_check.configure(state='normal')
             
-            print("CAN channel released")
+            self.log("CAN channel released")
             
         except Exception as e:
             self.show_error(f"Failed to release CAN channel: {str(e)}")
@@ -356,9 +355,9 @@ class ConnectionPack:
                         params[key] = value
             
             # Print all parameters
-            print("CAN Parameter Configuration:")
+            self.log("CAN Parameter Configuration:")
             for key, value in params.items():
-                print(f"  {key}: {value} ({type(value).__name__})")
+                self.log(f"  {key}: {value} ({type(value).__name__})")
                 
             return params
         except Exception as e:
@@ -371,5 +370,12 @@ class ConnectionPack:
             tuple: (can_bus, fdcan) - CAN总线对象和FD-CAN状态标志
         """
         return self.can_bus, self.fdcan
+
+    def log(self, message: str):
+        if self.trace_handler is None:
+            self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
+            
+        self.trace_handler(message)
+
     
     

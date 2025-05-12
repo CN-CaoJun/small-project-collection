@@ -41,7 +41,7 @@ exe = EXE(
     shared_analysis.scripts,
     [], 
     exclude_binaries=True,  
-    name='DiagnosticToolBox',
+    name='BDU_DiagnosticToolBox',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -64,5 +64,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='DiagnosticToolBox'
+    name='BDU_DiagnosticToolBox'
 )

@@ -342,10 +342,14 @@ class BootloaderPack:
         )
         if file_path:
             if file_type == 'sbl':
-                self.sbl_path_label.config(text=f"SBL: {os.path.basename(file_path)}", foreground="green")
+                # 获取文件最后修改时间
+                mod_time = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d %H:%M:%S')
+                self.sbl_path_label.config(text=f"[ {os.path.basename(file_path)} ] Last Modified: {mod_time}", foreground="green")
                 self.flash_config['sbl_hex'] = file_path
             else:
-                self.app_path_label.config(text=f"APP: {os.path.basename(file_path)}", foreground="green")
+                # 获取文件最后修改时间
+                mod_time = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d %H:%M:%S')
+                self.app_path_label.config(text=f"[{os.path.basename(file_path)} ] Last Modified: {mod_time}", foreground="green")
                 self.flash_config['app_hex'] = file_path
             
             if 'sbl_hex' in self.flash_config and 'app_hex' in self.flash_config:
