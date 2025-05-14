@@ -1,10 +1,10 @@
 {
-    "BDU-Client": {
-        "TXID": "0x730",
-        "RXID": "0x738"
+    "ZCU-R": {
+        "TXID": "0x736",
+        "RXID": "0x7B6"
     },
-    "BDU-Server": {
-        "TXID": "0x738",
-        "RXID": "0x730"
+    "ZCU-L": {
+        "TXID": "0x734",
+        "RXID": "0x7B4"
     }
 }

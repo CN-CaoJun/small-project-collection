@@ -18,7 +18,7 @@ VSVersionInfo(
         StringStruct(u'FileVersion', u'0.0.0.1'),
         StringStruct(u'InternalName', u'DiagnosticToolBox'),
         StringStruct(u'LegalCopyright', u'jun.cao@aptiv.com'),
-        StringStruct(u'OriginalFilename', u'BDU_DiagnosticToolBox.exe'),
+        StringStruct(u'OriginalFilename', u'Chery_DiagnosticToolBox.exe'),
         StringStruct(u'ProductName', u'ECU Diagnostic Tool'),
         StringStruct(u'ProductVersion', u'0.0.1')])
     ]),

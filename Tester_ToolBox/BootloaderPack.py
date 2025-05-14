@@ -28,8 +28,15 @@ class BootloaderPack:
         self.parent = parent
         self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
         self.uds_client = None
+        self.uds_client_func = None
         self.is_flashing = False
         self.flash_config = {}
+        self.currents_id = {
+            'RZCU': True,
+            'Zone': "RZCU",
+            'txid': 0x736, 
+            'rxid': 0x7b6
+        }
         self.create_widgets()
     
     def init_uds_client(self):
@@ -97,14 +104,21 @@ class BootloaderPack:
             # Create notifier
             self.notifier = can.Notifier(can_bus, [])
             
-            # Configure ISO-TP address
+            # 创建物理寻址的ISO-TP地址
             tp_addr = isotp.Address(
                 isotp.AddressingMode.Normal_11bits,
-                txid=0x730,  # Transmit ID
-                rxid=0x738   # Receive ID
+                txid=self.currents_id['txid'],  # 物理寻址发送ID
+                rxid=self.currents_id['rxid']   # 物理寻址接收ID
             )
             
-            # Create ISO-TP stack
+            # 创建功能寻址的ISO-TP地址
+            tp_addr_func = isotp.Address(
+                isotp.AddressingMode.Normal_11bits,
+                txid=0x7DF,    # 功能寻址发送ID
+                rxid=0x7E8     # 功能寻址接收ID
+            )
+            
+            # 创建物理寻址的ISO-TP栈
             self.stack = isotp.NotifierBasedCanStack(
                 bus=can_bus,
                 notifier=self.notifier,
@@ -112,17 +126,28 @@ class BootloaderPack:
                 params=isotp_params
             )
             
-            # Create UDS connection
-            conn = PythonIsoTpConnection(self.stack)
+            # 创建功能寻址的ISO-TP栈
+            self.stack_func = isotp.NotifierBasedCanStack(
+                bus=can_bus,
+                notifier=self.notifier,
+                address=tp_addr_func,
+                params=isotp_params
+            )
             
-            # Configure UDS client
+            # 创建物理寻址和功能寻址的UDS连接
+            conn = PythonIsoTpConnection(self.stack)
+            conn_func = PythonIsoTpConnection(self.stack_func)
+            
+            # 配置UDS客户端
             uds_config = udsoncan.configs.default_client_config.copy()
             uds_config['data_identifiers'] = {
                 'default': '>H',
                 0x7705: FlexRawData(30),
                 0xF15A: FlexRawData(9),
+                0xF184: FlexRawData(19),
                 0xF0F0: FlexRawData(1),
                 0x4611: FlexRawData(32),
+                0x5558: FlexRawData(32),
             }
             # Modify timeout configuration
             uds_config['p2_timeout'] = 5 # Increased to 2 seconds
@@ -140,27 +165,30 @@ class BootloaderPack:
                     self.trace_handler(f"  {key}: {value}")
             
             self.uds_client = Client(conn, config=uds_config)
+            self.uds_client_func = Client(conn_func, config=uds_config)
             
             if self.ensure_trace_handler():
-                self.trace_handler("UDS client initialization successful")
+                self.trace_handler("UDS clients initialization successful (Physical & Functional)")
             return True
             
         except Exception as e:
             if self.ensure_trace_handler():
-                self.trace_handler(f"UDS client initialization failed: {str(e)}")
+                self.trace_handler(f"UDS clients initialization failed: {str(e)}")
             return False
             
     def close_uds_connection(self):
         """Close UDS connection"""
         try:
             if self.uds_client:
+                if hasattr(self, 'uds_client_func'):
+                    self.uds_client_func = None
                 self.notifier.stop()
                 self.uds_client = None
                 if self.ensure_trace_handler():
-                    self.trace_handler("UDS connection closed")
+                    self.trace_handler("UDS connections closed")
         except Exception as e:
             if self.ensure_trace_handler():
-                self.trace_handler(f"Failed to close UDS connection: {str(e)}")
+                self.trace_handler(f"Failed to close UDS connections: {str(e)}")
 
     def ensure_trace_handler(self):
         """Ensure trace_handler is available"""
@@ -202,13 +230,13 @@ class BootloaderPack:
             try:
                 if not hasattr(self, 'is_flashing') or not self.is_flashing:
                     with self.uds_client as client:
-                        response = client.tester_present()
+                        response = client.conn.send(bytes.fromhex("3E80"))
                         if response:
                             if response.positive:
                                 self.uds_status_label.config(text="UDS Client: Online", foreground="green")
                         else: 
-                            self.uds_status_label.config(text="UDS Client: Offline", foreground="red")
-                        
+                            self.uds_status_label.config(text="UDS Client: Online", foreground="green")
+                            
             except Exception as e:
                 if self.ensure_trace_handler():
                     self.trace_handler(f"TesterPresent error: {str(e)}")
@@ -294,11 +322,11 @@ class BootloaderPack:
                 
             with self.uds_client as client:
                 # Read DID 0x7705 using UDS service
-                response = client.read_data_by_identifier(0x4611)
+                response = client.read_data_by_identifier(0x5558)
                 
                 if response and response.service_data.values:
                     # Get raw data from response
-                    data = response.service_data.values[0x4611]
+                    data = response.service_data.values[0x5558]
                     # Convert version information to ASCII string
                     version_str = data.decode('ascii', errors='ignore').strip()
                     # Update version information label in UI
@@ -419,6 +447,61 @@ class BootloaderPack:
         )
         self.app_select_btn.pack(side=tk.RIGHT, padx=5)
         
+        # 添加UDS ID显示和切换框架
+        self.uds_id_frame = ttk.Frame(self.file_frame)
+        self.uds_id_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        # 添加Request ID显示标签
+        self.req_id_label = ttk.Label(
+            self.uds_id_frame,
+            text="RZCU Request ID: ",
+            width=20,
+            anchor="w",
+            padding=(5,2)
+        )
+        self.req_id_label.pack(side=tk.LEFT)
+        
+        # 添加Request ID值标签
+        self.req_id_value = ttk.Label(
+            self.uds_id_frame,
+            text=f"0x{self.currents_id['txid']:X}",
+            foreground="green",
+            borderwidth=1,
+            width=8,
+            anchor="w",
+            padding=(5,2)
+        )
+        self.req_id_value.pack(side=tk.LEFT, padx=(0,10))
+        
+        # 添加Response ID显示标签
+        self.res_id_label = ttk.Label(
+            self.uds_id_frame,
+            text="RZCU Response ID: ",
+            width=20,
+            anchor="w",
+            padding=(5,2)
+        )
+        self.res_id_label.pack(side=tk.LEFT)
+        
+        # 添加Response ID值标签
+        self.res_id_value = ttk.Label(
+            self.uds_id_frame,
+            text=f"0x{self.currents_id['rxid']:X}",
+            foreground="green",
+            borderwidth=1,
+            width=8,
+            anchor="w",
+            padding=(5,2)
+        )
+        self.res_id_value.pack(side=tk.LEFT)
+        
+        self.toggle_ids_btn = ttk.Button(
+            self.uds_id_frame,
+            text="Change Zone",
+            command=self.toggle_uds_ids
+        )
+        self.toggle_ids_btn.pack(side=tk.RIGHT, padx=5)
+        
         # 添加UDS初始化控制框架
         self.uds_control_frame = ttk.Frame(self.bootloader_frame)
         self.uds_control_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -481,6 +564,30 @@ class BootloaderPack:
             foreground="gray"
         )
         self.version_label.pack(side=tk.LEFT, padx=(10, 0))
+    def toggle_uds_ids(self):
+        if self.currents_id['txid'] == 0x736:
+            self.currents_id['txid'] = 0x734 
+            self.currents_id['rxid'] = 0x7B4
+            self.currents_id['RZCU'] = False
+            self.currents_id['zone'] = 'LZCU'
+        else:
+            self.currents_id['txid'] = 0x736  
+            self.currents_id['rxid'] = 0x7B6
+            self.currents_id['RZCU'] = True
+            self.currents_id['zone'] = 'RZCU'
+            
+        if  self.currents_id['RZCU'] == True:
+             self.req_id_label.config(text="RZCU Request ID: ")
+             self.res_id_label.config(text="RZCU Response ID: ")
+        else:
+             self.req_id_label.config(text="LZCU Request ID: ")
+             self.res_id_label.config(text="LZCU Response ID: ")
+         
+        self.req_id_value.config(text=f"0x{self.currents_id['txid']:X}")
+        self.res_id_value.config(text=f"0x{self.currents_id['rxid']:X}")
+        
+        if self.ensure_trace_handler():
+            self.trace_handler(f"UDS IDs switched to Request=0x{self.currents_id['txid']:X} Response=0x{self.currents_id['rxid']:X}")
 
 class FlexRawData(udsoncan.DidCodec):
     def __init__(self, length: int):
@@ -500,4 +607,6 @@ class FlexRawData(udsoncan.DidCodec):
         return payload  # Return raw data directly
     def __len__(self):
         return self.data_length
+
+
 

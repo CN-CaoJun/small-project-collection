@@ -2,10 +2,10 @@ import json
 import os
 
 READ_ECU_MAP = {
-    'BDU-CLient': 
+    'ZCU-R': 
     {
-        'RXID': '0x738',
-        'TXID': '0x730'
+        'RXID': '0x7B6',
+        'TXID': '0x736'
     }
 }
 

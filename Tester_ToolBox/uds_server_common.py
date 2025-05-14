@@ -169,7 +169,7 @@ class ISOTPLayer:
                 'wftmax': 4,
                 'tx_data_length': 64,     # 增加到64字节以支持CANFD
                 'tx_data_min_length': 8,
-                'tx_padding': 0x00,
+                'tx_padding': 0xAA,
                 'rx_flowcontrol_timeout': 1000,
                 'rx_consecutive_frame_timeout': 100,
                 'can_fd': True,           # 启用CANFD
@@ -255,7 +255,7 @@ class Config:
 
 class UDSResponder:
     """UDS Response Handler"""
-    def __init__(self, test_case_file='BDU_response.json'):
+    def __init__(self, test_case_file='R_ZCU_response.json'):
         """
         Initialize UDS responder
         :param test_case_file: Test case file
@@ -288,54 +288,58 @@ class UDSResponder:
                 payload = self.isotp_layer.receive(timeout=0.50)
                 if payload:
                     response = self.process_request(payload)
-                    self.isotp_layer.send(response)
+                    if  response == None:
+                        print(f"[UDS] No need to response")
+                    else:
+                        self.isotp_layer.send(response)
             except Exception as e:
                 print(f"[UDS] Reception processing error: {e}")
-            time.sleep(0.01)
+            time.sleep(0.001)
 
     def process_request(self, payload):
         """
         Process UDS request and generate response
         :param payload: Request data
-        :return: Response data
+        :return: Response data or None
         """
         hex_req = payload.hex().upper()
         current_time = time.time()
         milliseconds = int((current_time - int(current_time)) * 1000)
         timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time)) + f'.{milliseconds:03d}'
-        print(f"[UDS] [{timestamp}] Received request: {hex_req}")
         
-        if len(payload) == 516 and payload[0] == 0x31:  # Check if first byte is 0x36
-            if payload[1] == 0x01: 
-                if payload[2] == 0xD0 and payload[3] == 0x02:
-                    return bytes([0x71,0x01,0xD0,0x02,0x00])  # Return 0x76 and sequence number
-            else:
-                return self._create_negative_response(0x31, 0x11)  # Return length error if no sequence number
+        # 打印非0x36服务的请求日志
+        if not (len(payload) > 0 and payload[0] == 0x36):
+            print(f"[UDS] [{timestamp}] Received request: {hex_req}")
         
-        # Handle transfer data request
-        if len(payload) > 0 and payload[0] == 0x36:  # Check if first byte is 0x36
-            if len(payload) > 1:
-                seq_number = payload[1]  # Get second byte as sequence number
-                return bytes([0x76, seq_number])  # Return 0x76 and sequence number
-            else:
-                return self._create_negative_response(0x36, 0x13)  # Return length error if no sequence number
-        
-        # Handle other requests
+        # 处理特定条件的直接响应
+        if len(payload) == 516 and payload[0] == 0x31 and payload[1] == 0x01 and payload[2] == 0xDD and payload[3] == 0x02:
+            response = bytes([0x71,0x01,0xDD,0x02,0x00])
+            print(f"[UDS] [{timestamp}] Sending direct response: {response.hex().upper()}")
+            return response
+            
+        if len(payload) > 0 and payload[0] == 0x36 and len(payload) > 1:
+            response = bytes([0x76, payload[1]])
+            # print(f"[UDS] [{timestamp}] Sending direct response: {response.hex().upper()}")
+            return response
+            
+        if len(payload) > 0 and payload[0] == 0x34 and len(payload) > 1:
+            response = bytes([0x74,0x40,0x00,0x00,0x0C,0x02])
+            print(f"[UDS] [{timestamp}] Sending direct response: {response.hex().upper()}")
+            return response
+            
+        if len(payload) == 13 and payload.startswith(bytes.fromhex('3101FF00')):
+            response = bytes.fromhex('7101FF0000')
+            print(f"[UDS] [{timestamp}] Sending direct response: {response.hex().upper()}")
+            return response
+
+        # 查找配置文件匹配
         response_hex = self.cfg.find_case(hex_req)
         if response_hex:
-            current_time = time.time()
-            milliseconds = int((current_time - int(current_time)) * 1000)
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time)) + f'.{milliseconds:03d}'
-            print(f"[UDS] [{timestamp}] Sending response: {response_hex}")
+            print(f"[UDS] [{timestamp}] Sending config response: {response_hex}")
             return bytes.fromhex(response_hex)
 
-        # If no matching response found, return negative response
-        nrc_response = self._create_negative_response(payload[0], 0x11)
-        current_time = time.time()
-        milliseconds = int((current_time - int(current_time)) * 1000)
-        timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time)) + f'.{milliseconds:03d}'
-        print(f"[UDS] [{timestamp}] Sending negative response: {nrc_response.hex().upper()}")
-        return nrc_response
+        # 都不匹配则静默不回复
+        return None
 
     def _create_negative_response(self, sid, nrc):
         """Generate negative response"""
@@ -354,8 +358,8 @@ def main():
         isotp_layer = ISOTPLayer(
             bus=bus,
             notifier=notifier,
-            txid=0x738,
-            rxid=0x730,
+            txid=0x7B6,
+            rxid=0x736,
             is_fd=can_factory.is_fd  # Use CAN bus FD setting
         )
         

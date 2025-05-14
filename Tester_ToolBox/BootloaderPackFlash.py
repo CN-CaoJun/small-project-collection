@@ -25,6 +25,10 @@ from udsoncan import MemoryLocation
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+from cryptography.hazmat.primitives import cmac
+from cryptography.hazmat.primitives.ciphers import algorithms
+from cryptography.hazmat.backends import default_backend
+import binascii
 
 class FlashingProcess:
     def __init__(self, uds_client: Client, trace_handler=None):
@@ -47,28 +51,25 @@ class FlashingProcess:
         if self.trace_handler:
             self.trace_handler(message)
     def read_signature_file(self, file_path: str) -> Optional[bytes]:
-        """Read and validate signature file
-        
-        Args:
-            file_path: Path to the signature binary file
-            
-        Returns:
-            Optional[bytes]: Signature data if successful, None if failed
-        """
         try:
             if not os.path.exists(file_path):
-                self.log(f"Error: Signature file does not exist: {file_path}")
+                self.log(f"错误: 签名文件不存在: {file_path}")
                 return None
                 
             with open(file_path, 'rb') as f:
                 data = f.read()
-                self.log(f"Successfully read signature file {os.path.basename(file_path)}")
-                self.log(f"File size: 0x{len(data):04X} bytes")
-                # self.log(f"File content: {data.hex().upper()}")
+                
+                if len(data) != 512:
+                    self.log(f"错误: 签名文件大小不正确 - 期望512字节，实际{len(data)}字节")
+                    return None
+                    
+                self.log(f"成功读取签名文件: {os.path.basename(file_path)}")
+                self.log(f"文件大小: {len(data)} 字节")
+                self.log(f"签名内容(前32字节): {data[:32].hex().upper()}")
                 return data
                 
         except Exception as e:
-            self.log(f"Signature file read exception: {str(e)}")
+            self.log(f"读取签名文件异常: {str(e)}")
             return None
     def read_hex_file(self, hex_file_path: str) -> Tuple[Optional[bytes], Optional[int], Optional[int]]:
         try:
@@ -89,11 +90,16 @@ class FlashingProcess:
             self.log(f"Error reading HEX file: {str(e)}")
             return None, None, None
     def program_request_only(self, data: bytes) -> bool:
-        """Send UDS request without waiting for response
-        
-        Args:
-            data: Data content to be sent
-        """
+
+        try:
+            with self.client as client:
+                client.conn.send(data)
+                self.log(f"Send data: {data.hex().upper()}")
+                return True
+            
+        except Exception as e:
+            self.log(f"Send request exception: {str(e)}")
+    def program_request_only_func(self, data: bytes) -> bool:
         try:
             with self.client as client:
                 client.conn.send(data)
@@ -134,6 +140,21 @@ class FlashingProcess:
         except Exception as e:
             self.log(f"Extended session exception: {str(e)}")
             return False
+    
+    def enable_check_bypass(self, routainid :int, data:bytes ) -> bool:
+        try:
+            with self.client as client:
+                response = client.routine_control(routine_id = routainid, control_type=0x01,data=data)
+                self.log(f"Response content: {response.data.hex().upper() if response else 'None'}")
+                if response.positive:
+                    self.log(f"Extended session {routainid} successfully")
+                    return True
+                else:
+                    self.log(f"Extended session failed, response: {response.data.hex().upper() if response else 'None'}")
+                    return False
+        except Exception as e:
+            self.log(f"Extended session exception: {str(e)}")
+            return False
             
     def security_access(self) -> bool:
         """Step 4 and 5: Security access"""
@@ -148,14 +169,15 @@ class FlashingProcess:
                     
                 self.log(f"Complete response data: {response.data.hex().upper()}")
                 print(f"seed response: {response.data.hex().upper()}")
-                seed = response.data[1:5]
-                self.log(f"Successfully got seed (length {len(seed)}): {seed.hex().upper()}")
+                seed_recv = response.data[1:17]
+                self.log(f"Successfully got seed (length {len(seed_recv)}): {seed_recv.hex().upper()}")
                 
-                computed_key = SecurityKeyAlgorithmBDU.compute_key(seed)
-                key = computed_key.to_bytes(4, byteorder='big')
-                print(f"Key: 0x{computed_key:08X}")
+                Calculate27 = SecurityKeyAlgorithm_Chery
+                
+                computed_key = Calculate27.calculate_security_key(Calculate27, zcu_type = "R", level= 0x11, seed = seed_recv)
+                print(f"Key: 0x{computed_key}")
 
-                response = client.send_key(level=0x12, key=key)
+                response = client.send_key(level=0x12, key=bytes.fromhex(computed_key))
                 if response:
                     self.log("Security access successful")
                     return True
@@ -167,8 +189,6 @@ class FlashingProcess:
             return False
             
     def write_f15a_identifier(self) -> bool:
-        """Step 6: Write F15A identifier"""
-        self.log("Step: Write F15A identifier")
         try:
             with self.client as client:
                 data = bytes.fromhex('73 05 08 7B 43 6C 7F 3F EC')
@@ -181,6 +201,34 @@ class FlashingProcess:
                     return False
         except Exception as e:
             self.log(f"Write F15A identifier exception: {str(e)}")
+            return False
+    
+    def read_f0f0_identifier(self) -> bool:
+        try:
+            with self.client as client:
+                response = client.write_data_by_identifier(did=0xF184, value=data)
+                
+                if response and response.positive:
+                    self.log("Has successfully written F184 identifier")
+                    return True
+                else:
+                    return False
+        except Exception as e:
+            self.log(f"Write F15A identifier exception: {str(e)}")
+            return False
+    def write_f184_identifier(self) -> bool:
+        try:
+            with self.client as client:
+                data = bytes.fromhex('19050E4F544130303120202020202020202020')
+                response = client.write_data_by_identifier(did=0xF184, value=data)
+                
+                if response and response.positive:
+                    self.log("Has successfully written F184 identifier")
+                    return True
+                else:
+                    return False
+        except Exception as e:
+            self.log(f"Write F184 identifier exception: {str(e)}")
             return False
             
     def request_download(self, download_type: str = 'sbl') -> bool:
@@ -327,14 +375,11 @@ class FlashingProcess:
                 self.log(f"Error: Invalid signature type: {data_type}")
                 return False
                 
-            import zlib
-            crc32_value = zlib.crc32(sig_data)
-            crc32_bytes = crc32_value.to_bytes(4, byteorder='big')
-            complete_data = crc32_bytes + sig_data
+            complete_data = sig_data
             
             with self.client as client:
                 response = client.routine_control(
-                    routine_id=0x0202,
+                    routine_id=0xDD02,
                     control_type=0x01,
                     data=complete_data
                 )
@@ -363,7 +408,7 @@ class FlashingProcess:
                 response = client.routine_control(
                     routine_id=0xFF00,
                     control_type=0x01,
-                    data=bytes.fromhex('01 02')
+                    data=bytes([0x44]) + self.app_start_addr.to_bytes(4, 'big') + self.app_data_length.to_bytes(4, 'big')
                 )
                 
                 if not response:
@@ -501,46 +546,48 @@ class FlashingProcess:
 
         self.log("Start executing flashing sequence...")
         
+        sbl_sig_path = sbl_hex_path.rsplit('.', 1)[0] + '.rsa'
+        # Temporary placeholder: Generate 512 bytes of signature data
+        # In real implementation, this should be replaced with actual signature data
+        temp_sig = []
+        for i in range(512):
+            # Generate pattern: 0x00, 0x01, 0x02, ..., 0xFF, 0x00, 0x01, ...
+            temp_sig.append(i % 256)
+        self.sbl_sig_data = bytes(temp_sig)
+        
+        if not self.sbl_sig_data:
+            self.log("Failed to read SBL signature file")
+            return False
+
         self.sbl_data, self.sbl_start_addr, self.sbl_data_length = self.read_hex_file(sbl_hex_path)
         if not self.sbl_data:
-            self.log("Failed to read SBL HEX file")
+            self.log("Failed to read SBL HEX file") 
             return False
-            
+
+        app_sig_path = app_hex_path.rsplit('.', 1)[0] + '.rsa'
+        self.app_sig_data = bytes(temp_sig)
+        if not self.app_sig_data:
+            self.log("Failed to read APP signature file")
+            return False
+        
         self.app_data, self.app_start_addr, self.app_data_length = self.read_hex_file(app_hex_path) 
         if not self.app_data:
             self.log("Failed to read APP HEX file")
             return False
         
-        # Private key string for ECDSA signature generation
-        private_key_str = 'D6A27848893345586DB67D1954D1A4CC753C5AA15181C2C81DAD1F1D413F7B4C'
-        # Derive private key from hex string using SECP256R1 curve
-        private_key = ec.derive_private_key(int(private_key_str, 16), ec.SECP256R1())
-        
-        # Generate ECDSA signature for SBL data using SHA256
-        signature = private_key.sign(self.sbl_data, ec.ECDSA(hashes.SHA256()))
-        # Decode signature into r and s components
-        r, s = decode_dss_signature(signature)
-        # Combine r and s components into 64-byte signature data
-        self.sbl_sig_data = r.to_bytes(32, 'big') + s.to_bytes(32, 'big')
-        print(f"SBL signature data: {self.sbl_sig_data.hex().upper()}")
-        
-        # Generate ECDSA signature for APP data using SHA256
-        signature = private_key.sign(self.app_data, ec.ECDSA(hashes.SHA256()))
-        # Decode signature into r and s components
-        r, s = decode_dss_signature(signature)
-        # Combine r and s components into 64-byte signature data
-        self.app_sig_data = r.to_bytes(32, 'big') + s.to_bytes(32, 'big')
-        print(f"APP signature data: {self.app_sig_data.hex().upper()}")
-        
         try:
             steps = [
-                lambda: self.program_request_only(bytes.fromhex('10 83')),
+                lambda: self.change_session(0x01),                                
+                lambda: self.program_request_only_func(bytes.fromhex('1083')),
                 self.enter_extended_session,        
-                lambda: self.program_request_only(bytes.fromhex('85 82')),
-                lambda: self.program_request_only(bytes.fromhex('28 81 01')),
-                lambda: self.change_session(0x02),                                
-                self.security_access,                                          
-                self.write_f15a_identifier,                                       
+                lambda: self.program_request_only_func(bytes.fromhex('8582')),
+                lambda: self.program_request_only_func(bytes.fromhex('288303')),
+                lambda: self.change_session(0x70),  
+                lambda: self.enable_check_bypass(routainid = 0x55B0, data=bytes.fromhex('00')),                             
+                lambda: self.enable_check_bypass(routainid = 0x55B1, data=bytes.fromhex('01')),                             
+                self.security_access,       
+                self.check_programming_status,                                   
+                self.write_f184_identifier,                                       
                 lambda:self.request_download(download_type = 'sbl'),           
                 lambda:self.transfer_hex_data(data_type = 'sbl'),           
                 lambda:self.exit_transfer(),                                          
@@ -551,13 +598,12 @@ class FlashingProcess:
                 lambda:self.exit_transfer(),                                            
                 lambda:self.transfer_signature(data_type = 'app'), 
                 self.complete_flash_process,               #3101FF01                     
-                self.reset_ecu,     #1101      
-                lambda: self.program_request_only(bytes.fromhex('10 83')),  #Extend Diag Session
-                self.program_testerpresent,
-                lambda: self.program_request_only(bytes.fromhex('28 80 01')),  #Enable Rx&Tx
-                lambda: self.program_request_only(bytes.fromhex('85 81')),      #Ctrl DTC setting ON
-                lambda: self.change_session(0x01),                           #Default Session     
-                self.fault_memory_clear,                                                                #Fault Memory CLear
+                lambda: self.program_request_only_func(bytes.fromhex('288003')),
+                self.reset_ecu,       
+                lambda: self.change_session(0x03),                                
+                self.fault_memory_clear,        
+                lambda: self.program_request_only_func(bytes.fromhex('8581')),
+                lambda: self.program_request_only(bytes.fromhex('1081')),
             ]
             
             for i, step in enumerate(steps, 1):
@@ -566,8 +612,8 @@ class FlashingProcess:
                     self.log(f"Step {i} failed, terminating flashing sequence")
                     return False
                 if step == self.reset_ecu:
-                    self.log("Waiting 4 seconds after ECU reset...")
-                    time.sleep(4)
+                    self.log("Waiting 1 seconds after ECU reset...")
+                    time.sleep(1)
                     
             self.log("Flashing sequence completed")
             return True
@@ -599,67 +645,51 @@ class SecurityKeyAlgorithm:
             temp_key &= 0xFFFFFFFF
         return temp_key
 
-class SecurityKeyAlgorithmBDU:
-    # Constants definition
-    MIN_PAR = 0x92120273
-    EOR_PAR = 0x012200107
-    PLU_PAR = 0x05081829
-    
-    @staticmethod
-    def carry_sub(p1: int, p2: int) -> tuple:
-        """Perform subtraction with carry
-        
-        Args:
-            p1: First operand
-            p2: Second operand
-            
-        Returns:
-            tuple: (result, carry flag)
-        """
-        carry = 1 if p2 > p1 else 0
-        result = (p1 - p2) & 0xFFFFFFFF  # Ensure 32-bit result
-        return result, carry
+class SecurityKeyAlgorithm_Chery:
+    def calculate_security_key(self, zcu_type: str, level: int, seed: bytes) -> bytes:
+        RZCU_SecurityAES128KEY1 = bytes([
+            0x27, 0xBB, 0x7B, 0x9F, 0xAA, 0x4D, 0xEC, 0x13,
+            0x32, 0x7A, 0x7C, 0x2F, 0xF7, 0xFA, 0xA1, 0x9A
+        ])
 
-    @staticmethod
-    def compute_key(seed: bytes) -> int:
-        """Compute security access key from seed
-        
-        Args:
-            seed: 4-byte seed value
-            
-        Returns:
-            int: Computed key value
-        """
-        # Convert 4-byte seed to 32-bit integer
-        seed_bdu = ((seed[0] << 24) & 0xFF000000) | \
-                   ((seed[1] << 16) & 0x00FF0000) | \
-                   ((seed[2] << 8) & 0x0000FF00) | \
-                   (seed[3] & 0x000000FF)
-        
-        for i in range(7, 1, -1):
-            # Right rotate by 1 bit
-            seed_bdu = ((seed_bdu >> 1) | (seed_bdu << 31)) & 0xFFFFFFFF
-            
-            # Perform subtraction with carry
-            seed_bdu, carry = SecurityKeyAlgorithmBDU.carry_sub(seed_bdu, SecurityKeyAlgorithmBDU.MIN_PAR)
-            
-            # If carry occurred, left rotate by 1 bit
-            if carry != 0:
-                seed_bdu = ((seed_bdu << 1) | (seed_bdu >> 31)) & 0xFFFFFFFF
-            
-            # XOR operation
-            seed_bdu ^= SecurityKeyAlgorithmBDU.EOR_PAR
-            
-            # Right rotate by 1 bit
-            seed_bdu = ((seed_bdu >> 1) | (seed_bdu << 31)) & 0xFFFFFFFF
-            
-            # Addition operation
-            seed_bdu = (seed_bdu + SecurityKeyAlgorithmBDU.PLU_PAR) & 0xFFFFFFFF
-        
-        # Final left rotate by 1 bit
-        seed_bdu = ((seed_bdu << 1) | (seed_bdu >> 31)) & 0xFFFFFFFF
-        
-        return seed_bdu
+        RZCU_SecurityAES128KEY11 = bytes([
+            0xA7, 0x34, 0xD1, 0x55, 0xA9, 0x6A, 0xA4, 0x09,
+            0xDB, 0x93, 0x3F, 0x74, 0x75, 0xF9, 0x35, 0xE9
+        ])
 
+        LZCU_SecurityAES128KEY1 = bytes([
+            0x96, 0xCB, 0x1B, 0xBF, 0x02, 0xDF, 0x05, 0x10,
+            0xF5, 0x21, 0x9C, 0xCE, 0x67, 0x9B, 0x98, 0xFA
+        ])
 
-    
+        LZCU_SecurityAES128KEY11 = bytes([
+            0x1A, 0xF0, 0x69, 0xCD, 0x52, 0x1B, 0xF9, 0x70,
+            0xE8, 0xDC, 0x8E, 0xC6, 0xBB, 0x24, 0x62, 0x8D
+        ])
+        try:
+            if zcu_type.upper() == 'R':
+                if level == 0x01:
+                    key = RZCU_SecurityAES128KEY1
+                elif level == 0x11:
+                    key = RZCU_SecurityAES128KEY11
+                else:
+                    raise ValueError(f"Invalid security level for RZCU: {level}")
+            elif zcu_type.upper() == 'L':
+                if level == 0x01:
+                    key = LZCU_SecurityAES128KEY1
+                elif level == 0x11:
+                    key = LZCU_SecurityAES128KEY11
+                else:
+                    raise ValueError(f"Invalid security level for LZCU: {level}")
+            else:
+                raise ValueError(f"Invalid ZCU type: {zcu_type}")
+
+            c = cmac.CMAC(algorithms.AES(key), backend=default_backend())
+            c.update(seed)
+            cmac_result = c.finalize()
+            
+            return cmac_result.hex().upper()
+            
+        except Exception as e:
+            self.log(f"Security key calculation failed: {str(e)}")
+            return None

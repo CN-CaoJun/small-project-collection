@@ -19,10 +19,9 @@ class MainWindow(tk.Tk):
     def __init__(self):
         super().__init__()
         
-        self.title("BDU Diagnostic ToolBox V0.0.1")
+        self.title("Chery ZCU Diagnostic ToolBox V0.0.1")
         self.geometry("750x800")
         
-        # 设置图标
         icon_path = os.path.join(os.path.dirname(__file__), 'assets', 'icon.ico')
         if os.path.exists(icon_path):
             self.iconbitmap(icon_path)
@@ -40,7 +39,7 @@ class MainWindow(tk.Tk):
         self.diagnostic_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Bootloader Pack 
-        self.bootloader_frame = ttk.LabelFrame(self.main_frame, text="BDU Bootloader")
+        self.bootloader_frame = ttk.LabelFrame(self.main_frame, text="Chery Bootloader")
         self.bootloader_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Trace Pack
