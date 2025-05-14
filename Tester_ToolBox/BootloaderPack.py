@@ -28,6 +28,7 @@ class BootloaderPack:
         self.parent = parent
         self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
         self.uds_client = None
+        self.is_flashing = False
         self.flash_config = {}
         self.create_widgets()
     

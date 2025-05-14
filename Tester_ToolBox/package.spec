@@ -10,7 +10,8 @@ shared_analysis = Analysis(
         ('reference_modules/python-can', 'reference_modules/python-can'),
         ('reference_modules/python-can-isotp', 'reference_modules/python-can-isotp'),
         ('reference_modules/python-udsoncan', 'reference_modules/python-udsoncan'),
-        ('assets/icon.ico', 'assets')
+        ('assets/icon.ico', 'assets'),
+        ('readme.md', 'readme') 
     ],
     hiddenimports=[
         'can',

@@ -364,11 +364,6 @@ class ConnectionPack:
             self.show_error(f"Parameter format error: {str(e)}")
             return None
     def get_can_bus(self):
-        """获取当前CAN总线对象和FD-CAN状态
-        
-        Returns:
-            tuple: (can_bus, fdcan) - CAN总线对象和FD-CAN状态标志
-        """
         return self.can_bus, self.fdcan
 
     def log(self, message: str):
