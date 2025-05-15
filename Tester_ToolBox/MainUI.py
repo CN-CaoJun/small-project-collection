@@ -19,7 +19,7 @@ class MainWindow(tk.Tk):
     def __init__(self):
         super().__init__()
         
-        self.title("Chery ZCU Diagnostic ToolBox V0.0.1")
+        self.title("Chery ZCU Diagnostic ToolBox V0.0.0.2")
         self.geometry("750x800")
         
         icon_path = os.path.join(os.path.dirname(__file__), 'assets', 'icon.ico')

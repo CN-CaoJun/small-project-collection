@@ -10,7 +10,7 @@ READ_ECU_MAP = {
 }
 
 class ECUMapReader:
-    def __init__(self, config_file='DiagnosticPack_EcuMap.json'):
+    def __init__(self, config_file='config_json/DiagnosticPack_EcuMap.json'):
         self.config_file = config_file
         self.load_ecu_map()
     

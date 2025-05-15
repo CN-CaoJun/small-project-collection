@@ -65,5 +65,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='Chery_DiagnosticToolBox'
+    name='Chery_DiagnosticToolBox_V0.0.0.2'
 )

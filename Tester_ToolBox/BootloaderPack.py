@@ -107,15 +107,15 @@ class BootloaderPack:
             # 创建物理寻址的ISO-TP地址
             tp_addr = isotp.Address(
                 isotp.AddressingMode.Normal_11bits,
-                txid=self.currents_id['txid'],  # 物理寻址发送ID
-                rxid=self.currents_id['rxid']   # 物理寻址接收ID
+                txid=self.currents_id['txid'],  
+                rxid=self.currents_id['rxid']   
             )
             
             # 创建功能寻址的ISO-TP地址
             tp_addr_func = isotp.Address(
                 isotp.AddressingMode.Normal_11bits,
-                txid=0x7DF,    # 功能寻址发送ID
-                rxid=0x7E8     # 功能寻址接收ID
+                txid=0x7DF,   
+                rxid=0x7DE    
             )
             
             # 创建物理寻址的ISO-TP栈
@@ -274,7 +274,7 @@ class BootloaderPack:
                 self.uds_status_label.config(text="UDS Client: Online", foreground="green")
                 # Immediately disable button (main thread operation)
                 self.start_flash_btn.config(state=tk.DISABLED)
-                flashing = FlashingProcess(self.uds_client, self.trace_handler)
+                flashing = FlashingProcess(self.uds_client, self.uds_client_func,self.trace_handler)
                 success = flashing.execute_flashing_sequence(
                     sbl_hex_path=self.flash_config['sbl_hex'],
                     app_hex_path=self.flash_config['app_hex']
@@ -331,7 +331,7 @@ class BootloaderPack:
                     version_str = data.decode('ascii', errors='ignore').strip()
                     # Update version information label in UI
                     self.version_label.config(
-                        text=f"Ver: {version_str[:12]}",
+                        text=f"{version_str[:32]}",
                         foreground="green"
                     )
                     # Log complete version information to trace handler

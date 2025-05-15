@@ -152,7 +152,7 @@ class ISOTPLayer:
         """
         
         logging.basicConfig(
-            level=logging.WARNING,
+            level=logging.DEBUG,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
                 logging.FileHandler('isotp_layer.log', encoding='utf-8'),
@@ -255,7 +255,7 @@ class Config:
 
 class UDSResponder:
     """UDS Response Handler"""
-    def __init__(self, test_case_file='R_ZCU_response.json'):
+    def __init__(self, test_case_file='config_json/R_ZCU_response.json'):
         """
         Initialize UDS responder
         :param test_case_file: Test case file

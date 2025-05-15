@@ -31,8 +31,10 @@ from cryptography.hazmat.backends import default_backend
 import binascii
 
 class FlashingProcess:
-    def __init__(self, uds_client: Client, trace_handler=None):
+    def __init__(self, uds_client: Client, uds_client_func: Client,trace_handler=None):
         self.client = uds_client
+        self.client_func = uds_client_func
+        
         self.trace_handler = trace_handler
         self.firmware_folder = None
         
@@ -53,23 +55,31 @@ class FlashingProcess:
     def read_signature_file(self, file_path: str) -> Optional[bytes]:
         try:
             if not os.path.exists(file_path):
-                self.log(f"错误: 签名文件不存在: {file_path}")
+                self.log(f"Error: Signature file does not exist: {file_path}")
                 return None
                 
-            with open(file_path, 'rb') as f:
-                data = f.read()
+            with open(file_path, 'r') as f:
+                content = f.read()
+            
+            hex_values = content.replace('0x', '').replace(',', '').replace(' ', '').strip()
+            
+            try:
+                data = bytes.fromhex(hex_values)
+            except ValueError as e:
+                self.log(f"Error: Invalid hex format: {str(e)}")
+                return None
                 
-                if len(data) != 512:
-                    self.log(f"错误: 签名文件大小不正确 - 期望512字节，实际{len(data)}字节")
-                    return None
-                    
-                self.log(f"成功读取签名文件: {os.path.basename(file_path)}")
-                self.log(f"文件大小: {len(data)} 字节")
-                self.log(f"签名内容(前32字节): {data[:32].hex().upper()}")
-                return data
+            if len(data) != 512:
+                self.log(f"Error: Invalid signature file size - Expected 512 bytes, got {len(data)} bytes")
+                return None
+                
+            self.log(f"Successfully read signature file: {os.path.basename(file_path)}")
+            self.log(f"File size: {len(data)} bytes")
+            self.log(f"Signature content (first 16 bytes): {data[:16].hex().upper()}")
+            return data
                 
         except Exception as e:
-            self.log(f"读取签名文件异常: {str(e)}")
+            self.log(f"Read signature file exception: {str(e)}")
             return None
     def read_hex_file(self, hex_file_path: str) -> Tuple[Optional[bytes], Optional[int], Optional[int]]:
         try:
@@ -94,16 +104,16 @@ class FlashingProcess:
         try:
             with self.client as client:
                 client.conn.send(data)
-                self.log(f"Send data: {data.hex().upper()}")
+                self.log(f"Send Phy Request data: {data.hex().upper()}")
                 return True
             
         except Exception as e:
             self.log(f"Send request exception: {str(e)}")
     def program_request_only_func(self, data: bytes) -> bool:
         try:
-            with self.client as client:
+            with self.client_func as client:
                 client.conn.send(data)
-                self.log(f"Send data: {data.hex().upper()}")
+                self.log(f"Send Func Request data: {data.hex().upper()}")
                 return True
             
         except Exception as e:
@@ -238,19 +248,17 @@ class FlashingProcess:
                 if download_type.lower() == 'sbl':
                     addr = self.sbl_start_addr
                     size = self.sbl_data_length
-                    address_format = 0x01
                 elif download_type.lower() == 'app':
                     addr = self.app_start_addr
                     size = self.app_data_length
-                    address_format = 0x02
                 else:
                     self.log(f"Invalid download type: {download_type}")
                     return False
 
                 memory_location = MemoryLocation(
-                    address=address_format,
+                    address=addr,
                     memorysize=size,
-                    address_format=8,
+                    address_format=32,
                     memorysize_format=32
                 )
                 
@@ -320,7 +328,11 @@ class FlashingProcess:
                             end_offset = min(start_offset + self.max_block_size, data_length)
                             current_block = hex_data[start_offset:end_offset]
                             
-                            self.log(f"Transferring packet {packet_index + 1:02d}/{total_packets:02d}, Sequence: 0x{sequence_number:02X}, Length: 0x{len(current_block):04X} bytes")
+                            # Only log every 100 packets
+                            if (packet_index + 1) % 100 == 0 or packet_index == 0 or packet_index == total_packets - 1:
+                                progress = f"[{packet_index + 1}/{total_packets}]"
+                                self.log(f"{progress} Transferring data - Sequence: 0x{sequence_number:02X}, Length: 0x{len(current_block):04X}")
+                            
                             response = client.transfer_data(sequence_number=sequence_number, data=current_block)
                             
                             if not response.positive:
@@ -547,14 +559,7 @@ class FlashingProcess:
         self.log("Start executing flashing sequence...")
         
         sbl_sig_path = sbl_hex_path.rsplit('.', 1)[0] + '.rsa'
-        # Temporary placeholder: Generate 512 bytes of signature data
-        # In real implementation, this should be replaced with actual signature data
-        temp_sig = []
-        for i in range(512):
-            # Generate pattern: 0x00, 0x01, 0x02, ..., 0xFF, 0x00, 0x01, ...
-            temp_sig.append(i % 256)
-        self.sbl_sig_data = bytes(temp_sig)
-        
+        self.sbl_sig_data = self.read_signature_file(sbl_sig_path)
         if not self.sbl_sig_data:
             self.log("Failed to read SBL signature file")
             return False
@@ -565,7 +570,7 @@ class FlashingProcess:
             return False
 
         app_sig_path = app_hex_path.rsplit('.', 1)[0] + '.rsa'
-        self.app_sig_data = bytes(temp_sig)
+        self.app_sig_data = self.read_signature_file(app_sig_path)
         if not self.app_sig_data:
             self.log("Failed to read APP signature file")
             return False
