@@ -18,19 +18,15 @@ class ConnectionPack:
         self.parent = parent
         self.can_bus = None
         self.connected = False
-        # Store channel configuration information
         self.channel_configs = {}
-        # 创建控件
         self.fdcan = False
         self.trace_handler = self.parent.winfo_toplevel().get_trace_handler()
         self.create_widgets()
         
     def create_widgets(self):
-        # 创建控件容器框架
         self.controls_frame = ttk.Frame(self.parent)
         self.controls_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # Hardware部分
         self.hw_frame = ttk.Frame(self.controls_frame)
         self.hw_frame.pack(side=tk.LEFT, padx=5)
         ttk.Label(self.hw_frame, text="Hardware:").pack(anchor=tk.W)
@@ -44,12 +40,10 @@ class ConnectionPack:
                                     command=self.scan_can_device)
         self.scan_button.pack(side=tk.LEFT)
         
-        # Baudrate部分
         self.baud_frame = ttk.Frame(self.controls_frame)
         self.baud_frame.pack(side=tk.LEFT, padx=5)
         ttk.Label(self.baud_frame, text="Baudrate Parameters:").pack(anchor=tk.W)
         
-        # 默认参数设置
         self.default_can_params = "fd=False,bitrate=500000,tseg1_abr=63,tseg2_abr=16,sjw_abr=16"
         self.default_canfd_params = "fd=True,bitrate=500000,data_bitrate=2000000,tseg1_abr=63,tseg2_abr=16,sjw_abr=16,sam_abr=1,tseg1_dbr=13,tseg2_dbr=6,sjw_dbr=6"
         
@@ -57,7 +51,6 @@ class ConnectionPack:
         self.baudrate_entry.insert(0, self.default_can_params)
         self.baudrate_entry.pack(anchor=tk.W)
         
-        # CAN-FD选项部分
         self.canfd_frame = ttk.Frame(self.controls_frame)
         self.canfd_frame.pack(side=tk.LEFT, padx=5)
         ttk.Label(self.canfd_frame, text="CAN-FD:").pack(anchor=tk.W)
@@ -67,12 +60,10 @@ class ConnectionPack:
                                          command=self.on_canfd_changed)
         self.canfd_check.pack(anchor=tk.W)
         
-        # 操作按钮部分
         self.button_frame = ttk.Frame(self.controls_frame)
         self.button_frame.pack(side=tk.LEFT, padx=5)
         ttk.Label(self.button_frame, text="Operation:").pack(anchor=tk.W)
         
-        # 设置按钮样式
         self.style = ttk.Style()
         self.style.configure("Toggle.TButton",
                            background="gray",
@@ -122,15 +113,6 @@ class ConnectionPack:
                     canlib.xldriver.xlOpenDriver()
                     vector_configs = canlib.get_channel_configs()
                     
-                    # self.log("\nVector设备配置信息:")
-                    # for config in vector_configs:
-                    #     self.log(f"通道名称: {config.name}")
-                    #     self.log(f"硬件通道: {config.hw_channel}")
-                    #     self.log(f"硬件类型: {config.hw_type}")
-                    #     self.log(f"硬件索引: {config.hw_index}")
-                    #     self.log(f"通道掩码: {config.channel_mask}")
-                    #     self.log("------------------------")
-                    
                     for config in vector_configs:
                         channel_name = f"{config.serial_number}: {config.name}"
                         channel_list.append(channel_name)
@@ -177,7 +159,6 @@ class ConnectionPack:
                 from can.interfaces import slcan
                 from serial.tools.list_ports import comports
                 
-                # 扫描所有可用串口
                 for port in comports():
                     self.log(f"Found port: {port.device}, location: {port.location}")
                     if port.location is not None:
@@ -189,10 +170,9 @@ class ConnectionPack:
                             'description': port.description,
                             'hwid': port.hwid
                         }
-                        # 新增调试信息打印
-                        self.log(f"SLCAN设备信息 - 端口: {port.device}")
-                        self.log(f"描述: {port.description}")
-                        self.log(f"硬件ID: {port.hwid}\n")
+                        self.log(f"SLCAN Device Info - Port: {port.device}")
+                        self.log(f"Description: {port.description}")
+                        self.log(f"Hardware ID: {port.hwid}\n")
                         
             except Exception as e:
                 self.log(f"SLCAN scan error: {str(e)}")
