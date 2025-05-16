@@ -37,6 +37,7 @@ class BootloaderPack:
             'txid': 0x736, 
             'rxid': 0x7b6
         }
+        self.cal_is_must = False
         self.create_widgets()
     
     def init_uds_client(self):
@@ -50,14 +51,13 @@ class BootloaderPack:
                     self.trace_handler("Error: CAN bus not initialized")
                 return False
             
-            # logging.basicConfig(
-            #     level=logging.WARN,
-            #     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            #     handlers=[
-            #         logging.FileHandler('bootloader_flash.log', encoding='utf-8'),  
-            #         logging.StreamHandler()  
-            #     ]
-            # )
+            logging.basicConfig(
+                level=logging.DEBUG,
+                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                handlers=[
+                    logging.FileHandler('log/bootloader_flash.log', encoding='utf-8'),  
+                ]
+            )
             
             # Configure ISO-TP parameters
             if isfd:
@@ -101,24 +101,20 @@ class BootloaderPack:
                 if self.ensure_trace_handler():
                     self.trace_handler("Using Standard CAN ISO-TP parameters")
             
-            # Create notifier
             self.notifier = can.Notifier(can_bus, [])
             
-            # 创建物理寻址的ISO-TP地址
             tp_addr = isotp.Address(
                 isotp.AddressingMode.Normal_11bits,
                 txid=self.currents_id['txid'],  
                 rxid=self.currents_id['rxid']   
             )
             
-            # 创建功能寻址的ISO-TP地址
             tp_addr_func = isotp.Address(
                 isotp.AddressingMode.Normal_11bits,
                 txid=0x7DF,   
                 rxid=0x7DE    
             )
             
-            # 创建物理寻址的ISO-TP栈
             self.stack = isotp.NotifierBasedCanStack(
                 bus=can_bus,
                 notifier=self.notifier,
@@ -126,7 +122,6 @@ class BootloaderPack:
                 params=isotp_params
             )
             
-            # 创建功能寻址的ISO-TP栈
             self.stack_func = isotp.NotifierBasedCanStack(
                 bus=can_bus,
                 notifier=self.notifier,
@@ -134,7 +129,6 @@ class BootloaderPack:
                 params=isotp_params
             )
             
-            # 创建物理寻址和功能寻址的UDS连接
             conn = PythonIsoTpConnection(self.stack)
             conn_func = PythonIsoTpConnection(self.stack_func)
             
@@ -277,8 +271,9 @@ class BootloaderPack:
                 flashing = FlashingProcess(self.uds_client, self.uds_client_func,self.trace_handler)
                 success = flashing.execute_flashing_sequence(
                     zone_type = self.currents_id['Zone'],
-                    sbl_hex_path=self.flash_config['sbl_hex'],
-                    app_hex_path=self.flash_config['app_hex']
+                    cal_is_must = self.cal_is_must,
+                    flash_config=self.flash_config,
+                    
                 )
                 self.status_label.config(text="Flashing Ongoing", foreground="green")
                 self.update_flash_status(success)
@@ -373,37 +368,130 @@ class BootloaderPack:
         )
         if file_path:
             if file_type == 'sbl':
-                # 获取文件最后修改时间
                 mod_time = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d %H:%M:%S')
                 self.sbl_path_label.config(text=f"[ {os.path.basename(file_path)} ] Last Modified: {mod_time}", foreground="green")
                 self.flash_config['sbl_hex'] = file_path
-            else:
-                # 获取文件最后修改时间
+            elif file_type == 'cal1':
+                mod_time = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d %H:%M:%S')
+                self.cal1_path_label.config(text=f"[ {os.path.basename(file_path)} ] Last Modified: {mod_time}", foreground="green")
+                self.flash_config['cal1_hex'] = file_path
+            elif file_type == 'cal2':
+                mod_time = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d %H:%M:%S')
+                self.cal2_path_label.config(text=f"[ {os.path.basename(file_path)} ] Last Modified: {mod_time}", foreground="green")
+                self.flash_config['cal2_hex'] = file_path
+            else:  
                 mod_time = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d %H:%M:%S')
                 self.app_path_label.config(text=f"[{os.path.basename(file_path)} ] Last Modified: {mod_time}", foreground="green")
                 self.flash_config['app_hex'] = file_path
             
-            if 'sbl_hex' in self.flash_config and 'app_hex' in self.flash_config:
-                if os.path.exists(self.flash_config['sbl_hex']) and os.path.exists(self.flash_config['app_hex']):
-                    if self.ensure_trace_handler():
-                        self.trace_handler("Config check PASS - All required files found")
-                    self.start_flash_btn.config(state=tk.NORMAL)
-                    return
+            required_files = ['sbl_hex', 'app_hex']
+            if self.cal_is_must:
+                required_files += ['cal1_hex', 'cal2_hex']
+            
+            all_required_exist = all(
+                f in self.flash_config and os.path.exists(self.flash_config[f]) 
+                for f in required_files
+            )
+            
+            cal_valid = True
+            if self.cal_is_must:
+                cal_valid = all(f in self.flash_config for f in ['cal1_hex', 'cal2_hex'])
+            
+            if all_required_exist and cal_valid:
+                if self.ensure_trace_handler():
+                    self.trace_handler("Config check PASS - Required files found:")
+                    for file_type, file_path in self.flash_config.items():
+                        self.trace_handler(f"  - {file_type}: {os.path.basename(file_path)}")
+                self.start_flash_btn.config(state=tk.NORMAL)
+                return
             
             self.start_flash_btn.config(state=tk.DISABLED)
     def create_widgets(self):
         self.bootloader_frame = ttk.LabelFrame(self.parent, text="Operation")
         self.bootloader_frame.pack(fill=tk.X, padx=5, pady=5, expand=False)
-
         # Create file path display frame
         self.file_frame = ttk.Frame(self.bootloader_frame)
         self.file_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Create calibration files frame
+        # Create calibration frame with checkbox
+        self.cal_frame = ttk.LabelFrame(self.file_frame, text="Calibration Files")
+        self.enable_cal_var = tk.BooleanVar(value=False)
+        self.enable_cal_check = ttk.Checkbutton(
+            self.cal_frame,
+            text="Enable Calibration Files",
+            variable=self.enable_cal_var,
+            command=self.toggle_cal_selection
+        )
+        self.enable_cal_check.pack(anchor='w', padx=5, pady=2)
+        self.cal_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        # CAL1 file path display frame
+        self.cal1_frame = ttk.Frame(self.cal_frame)
+        self.cal1_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        self.cal1_label = ttk.Label(self.cal1_frame, text="CAL1 File:",width=10,state='disabled')
+        self.cal1_label.pack(side=tk.LEFT, padx=(0,5))
+        
+        self.cal1_path_label = ttk.Label(
+            self.cal1_frame, 
+            text="N/A",
+            relief="solid",
+            borderwidth=1,
+            width=30,
+            anchor="w",
+            padding=(5,2),
+            state='disabled'  # Initially disabled
+        )
+        self.cal1_path_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        self.cal1_select_btn = ttk.Button(
+            self.cal1_frame,
+            text="Select CAL1",
+            command=lambda: self.select_file('cal1'),
+            width=15,
+            state='disabled'  # Initially disabled
+        )
+        self.cal1_select_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # CAL2 file path display frame
+        self.cal2_frame = ttk.Frame(self.cal_frame)
+        self.cal2_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        self.cal2_label = ttk.Label(
+            self.cal2_frame, 
+            text="CAL2 File:",
+            width=10,
+            state='disabled' 
+        )
+        self.cal2_label.pack(side=tk.LEFT, padx=(0,5))
+        
+        self.cal2_path_label = ttk.Label(
+            self.cal2_frame, 
+            text="N/A",
+            relief="solid",
+            borderwidth=1,
+            width=30,
+            anchor="w",
+            padding=(5,2),
+            state='disabled'  # Initially disabled
+        )
+        self.cal2_path_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        self.cal2_select_btn = ttk.Button(
+            self.cal2_frame,
+            text="Select CAL2",
+            command=lambda: self.select_file('cal2'),
+            width=15,
+            state='disabled'  # Initially disabled
+        )
+        self.cal2_select_btn.pack(side=tk.RIGHT, padx=5)
         
         # SBL file path display frame
         self.sbl_frame = ttk.Frame(self.file_frame)
         self.sbl_frame.pack(fill=tk.X, padx=5, pady=2)
         
-        self.sbl_label = ttk.Label(self.sbl_frame, text="SBL File: ")
+        self.sbl_label = ttk.Label(self.sbl_frame, text="SBL File:",width=10)
         self.sbl_label.pack(side=tk.LEFT, padx=(0,5))
         
         self.sbl_path_label = ttk.Label(
@@ -420,7 +508,8 @@ class BootloaderPack:
         self.sbl_select_btn = ttk.Button(
             self.sbl_frame,
             text="Select SBL",
-            command=lambda: self.select_file('sbl')
+            command=lambda: self.select_file('sbl'),
+            width=15  # Set fixed button width to 15 characters
         )
         self.sbl_select_btn.pack(side=tk.RIGHT, padx=5)
         
@@ -428,7 +517,7 @@ class BootloaderPack:
         self.app_frame = ttk.Frame(self.file_frame)
         self.app_frame.pack(fill=tk.X, padx=5, pady=2)
         
-        self.app_label = ttk.Label(self.app_frame, text="APP File:")
+        self.app_label = ttk.Label(self.app_frame, text="APP File:",width=10)
         self.app_label.pack(side=tk.LEFT, padx=(0,5))
         
         self.app_path_label = ttk.Label(
@@ -445,15 +534,16 @@ class BootloaderPack:
         self.app_select_btn = ttk.Button(
             self.app_frame,
             text="Select APP",
-            command=lambda: self.select_file('app')
+            command=lambda: self.select_file('app'),
+            width=15  # Set fixed button width to 15 characters
         )
         self.app_select_btn.pack(side=tk.RIGHT, padx=5)
         
-        # 添加UDS ID显示和切换框架
+
+        # Create flash button
         self.uds_id_frame = ttk.Frame(self.file_frame)
         self.uds_id_frame.pack(fill=tk.X, padx=5, pady=2)
         
-        # 添加Request ID显示标签
         self.req_id_label = ttk.Label(
             self.uds_id_frame,
             text="RZCU Request ID: ",
@@ -463,7 +553,6 @@ class BootloaderPack:
         )
         self.req_id_label.pack(side=tk.LEFT)
         
-        # 添加Request ID值标签
         self.req_id_value = ttk.Label(
             self.uds_id_frame,
             text=f"0x{self.currents_id['txid']:X}",
@@ -475,7 +564,6 @@ class BootloaderPack:
         )
         self.req_id_value.pack(side=tk.LEFT, padx=(0,10))
         
-        # 添加Response ID显示标签
         self.res_id_label = ttk.Label(
             self.uds_id_frame,
             text="RZCU Response ID: ",
@@ -485,7 +573,6 @@ class BootloaderPack:
         )
         self.res_id_label.pack(side=tk.LEFT)
         
-        # 添加Response ID值标签
         self.res_id_value = ttk.Label(
             self.uds_id_frame,
             text=f"0x{self.currents_id['rxid']:X}",
@@ -508,15 +595,14 @@ class BootloaderPack:
         self.toggle_ids_btn = ttk.Button(
             self.uds_id_frame,
             text="Change Zone",
-            command=self.toggle_uds_ids
+            command=self.toggle_uds_ids,
+            width=15
         )
         self.toggle_ids_btn.pack(side=tk.RIGHT, padx=5)
         
-        # 添加UDS初始化控制框架
         self.uds_control_frame = ttk.Frame(self.bootloader_frame)
         self.uds_control_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # 添加UDS初始化按钮
         self.init_uds_btn = ttk.Button(
             self.uds_control_frame,
             text="Init UDS Client",
@@ -524,7 +610,6 @@ class BootloaderPack:
         )
         self.init_uds_btn.pack(side=tk.LEFT, padx=(0, 5))
         
-        # 添加UDS连接状态标签
         self.uds_status_label = ttk.Label(
             self.uds_control_frame,
             text="UDS Client: Not Connected",
@@ -532,15 +617,6 @@ class BootloaderPack:
         )
         self.uds_status_label.pack(side=tk.LEFT, padx=5)
         
-        # # 添加ECU复位按钮
-        # self.ecu_reset_btn = ttk.Button(
-        #     self.uds_control_frame,
-        #     text="ECU Reset",
-        #     command=self.perform_ecu_reset
-        # )
-        # self.ecu_reset_btn.pack(side=tk.LEFT, padx=(10, 5))
-        
-        # 添加开始刷写按钮
         self.start_flash_btn = ttk.Button(
             self.uds_control_frame,
             text="Start Flash",
@@ -549,7 +625,6 @@ class BootloaderPack:
         )
         self.start_flash_btn.pack(side=tk.LEFT, padx=(10, 5))
         
-        # 添加刷写状态标签
         self.status_label = ttk.Label(
             self.uds_control_frame,
             text="Status: Ready",
@@ -558,7 +633,6 @@ class BootloaderPack:
         )
         self.status_label.pack(side=tk.LEFT, padx=(5, 10))
         
-        # 在现有按钮后添加版本获取按钮
         self.get_version_btn = ttk.Button(
             self.uds_control_frame,
             text="Get Version",
@@ -566,7 +640,6 @@ class BootloaderPack:
         )
         self.get_version_btn.pack(side=tk.LEFT, padx=(10, 5))
         
-        # 添加版本信息显示标签
         self.version_label = ttk.Label(
             self.uds_control_frame,
             text="Version: N/A",
@@ -592,7 +665,44 @@ class BootloaderPack:
         
         if self.ensure_trace_handler():
             self.trace_handler(f"UDS IDs switched to Request=0x{self.currents_id['txid']:X} Response=0x{self.currents_id['rxid']:X}")
+    def toggle_cal_selection(self):
+        state = 'normal' if self.enable_cal_var.get() else 'disabled'
+        
+        for widget in [self.cal1_label, self.cal1_path_label, self.cal1_select_btn,
+                      self.cal2_label, self.cal2_path_label, self.cal2_select_btn]:
+            widget.configure(state=state)
+        
+        if not self.enable_cal_var.get():
+            self.cal1_path_label.config(text="N/A")
+            self.cal2_path_label.config(text="N/A")
+            self.flash_config.pop('cal1_hex', None)
+            self.flash_config.pop('cal2_hex', None)
+            self.cal_is_must = False
+        else:
+            self.cal_is_must = True
 
+        required_files = ['sbl_hex', 'app_hex']
+        if self.cal_is_must:
+            required_files += ['cal1_hex', 'cal2_hex']
+        
+        all_required_exist = all(
+            f in self.flash_config and os.path.exists(self.flash_config[f])
+            for f in required_files
+        )
+
+        if all_required_exist:
+            self.start_flash_btn.config(state=tk.NORMAL)
+        else:
+            self.start_flash_btn.config(state=tk.DISABLED)
+        
+        if self.ensure_trace_handler():
+            status = "MUST" if self.cal_is_must else "NO NEED"
+            self.trace_handler(f"Calibration requirement status changed to: {status}")
+            if not all_required_exist:
+                self.trace_handler("Missing required files - Flash button disabled")
+            else:
+                self.trace_handler("Config check PASS - All required files found")
+                
 class FlexRawData(udsoncan.DidCodec):
     def __init__(self, length: int):
         self.data_length = length
@@ -611,6 +721,3 @@ class FlexRawData(udsoncan.DidCodec):
         return payload  # Return raw data directly
     def __len__(self):
         return self.data_length
-
-
-

@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 import sys
 import os
+from tracemalloc import start
 import intelhex
 
 sys.path.insert(0, os.path.abspath("reference_modules/python-can"))
@@ -29,6 +30,7 @@ from cryptography.hazmat.primitives import cmac
 from cryptography.hazmat.primitives.ciphers import algorithms
 from cryptography.hazmat.backends import default_backend
 import binascii
+import json
 
 class FlashingProcess:
     def __init__(self, uds_client: Client, uds_client_func: Client,trace_handler=None):
@@ -38,11 +40,22 @@ class FlashingProcess:
         self.trace_handler = trace_handler
         self.firmware_folder = None
         
+        self.cal1_sig_data = None
+        self.cal1_data = None
+        self.cal1_start_addr = None
+        self.cal1_data_length = None
+        
+        self.cal2_sig_data = None
+        self.cal2_data = None
+        self.cal2_start_addr = None
+        self.cal2_data_length = None
+        
         self.sbl_sig_data = None
-        self.app_sig_data = None
         self.sbl_data = None
         self.sbl_start_addr = None
         self.sbl_data_length = None
+        
+        self.app_sig_data = None
         self.app_data = None
         self.app_start_addr = None 
         self.app_data_length = None
@@ -175,15 +188,13 @@ class FlashingProcess:
                     self.log("Failed to get seed")
                     return False
                     
-                self.log(f"Complete response data: {response.data.hex().upper()}")
-                print(f"seed response: {response.data.hex().upper()}")
+                self.log(f"seed: {response.data.hex().upper()}")
                 seed_recv = response.data[1:17]
-                self.log(f"Successfully got seed (length {len(seed_recv)}): {seed_recv.hex().upper()}")
                 
                 Calculate27 = SecurityKeyAlgorithm_Chery
                 
                 computed_key = Calculate27.calculate_security_key(Calculate27, zcu_type = zone, level= 0x11, seed = seed_recv)
-                print(f"Key: 0x{computed_key}")
+                self.log(f"Key: 0x{computed_key}")
 
                 response = client.send_key(level=0x12, key=bytes.fromhex(computed_key))
                 if response:
@@ -236,6 +247,12 @@ class FlashingProcess:
                 elif download_type.lower() == 'app':
                     addr = self.app_start_addr
                     size = self.app_data_length
+                elif download_type.lower() == 'cal1':
+                    addr = self.cal1_start_addr
+                    size = self.cal1_data_length
+                elif download_type.lower() == 'cal2':
+                    addr = self.cal2_start_addr
+                    size = self.cal2_data_length
                 else:
                     self.log(f"Invalid download type: {download_type}")
                     return False
@@ -273,19 +290,21 @@ class FlashingProcess:
         self.log(f"Step: Transfer {data_type.upper()} data")
         try:
             if data_type.lower() == 'sbl':
-                if not self.sbl_data:
-                    self.log("SBL data not initialized")
-                    return False
                 hex_data = self.sbl_data
                 start_addr = self.sbl_start_addr
                 data_length = self.sbl_data_length
             elif data_type.lower() == 'app':
-                if not self.app_data:
-                    self.log("APP data not initialized")
-                    return False
                 hex_data = self.app_data
                 start_addr = self.app_start_addr
                 data_length = self.app_data_length
+            elif data_type.lower() == 'cal1':
+                hex_data = self.cal1_data
+                start_addr = self.cal1_start_addr
+                data_length = self.cal1_data_length
+            elif data_type.lower() == 'cal2':
+                hex_data = self.cal2_data
+                start_addr = self.cal2_start_addr
+                data_length = self.cal2_data_length
             else:
                 self.log(f"Invalid data type: {data_type}")
                 return False
@@ -302,7 +321,7 @@ class FlashingProcess:
                         # Calculate total packets with ceiling division to ensure all data is transmitted
                         total_packets = (data_length + self.max_block_size - 1) // self.max_block_size
                         if total_packets == 0:
-                            total_packets = 1  # Ensure at least one packet
+                            total_packets = 1  
                             
                         self.log(f"Data transfer info - Total length: 0x{data_length:04X} bytes, Packets: {total_packets}, Max block size: 0x{self.max_block_size:04X} bytes")
                         
@@ -314,7 +333,7 @@ class FlashingProcess:
                             current_block = hex_data[start_offset:end_offset]
                             
                             # Only log every 100 packets
-                            if (packet_index + 1) % 100 == 0 or packet_index == 0 or packet_index == total_packets - 1:
+                            if (packet_index + 1) % 128 == 0 or packet_index == 0 or packet_index == total_packets - 1:
                                 progress = f"[{packet_index + 1}/{total_packets}]"
                                 self.log(f"{progress} Transferring data - Sequence: 0x{sequence_number:02X}, Length: 0x{len(current_block):04X}")
                             
@@ -368,6 +387,16 @@ class FlashingProcess:
                     self.log("Error: APP signature data not initialized")
                     return False
                 sig_data = self.app_sig_data
+            elif data_type.lower() == 'cal1':
+                if not self.cal1_sig_data:
+                    self.log("Error: APP signature data not initialized")
+                    return False
+                sig_data = self.cal1_sig_data
+            elif data_type.lower() == 'cal2':
+                if not self.cal2_sig_data:
+                    self.log("Error: APP signature data not initialized")
+                    return False
+                sig_data = self.cal2_sig_data
             else:
                 self.log(f"Error: Invalid signature type: {data_type}")
                 return False
@@ -396,16 +425,30 @@ class FlashingProcess:
             self.log(f"{data_type.upper()} signature transfer exception: {str(e)}")
             return False
             
-    def erase_memory(self) -> bool:
+    def erase_memory(self, partaion_type:str) -> bool:
         """Step 11: Erase APP address using routine control service"""
-        self.log("Step: Erase APP address")
+        self.log(f"Step: Erase {partaion_type} address")
+        
+        if partaion_type == "app":
+            start_address = self.app_start_addr
+            length=self.app_data_length
+        elif partaion_type == "cal1":
+            start_address = self.cal1_start_addr
+            length=self.cal1_data_length
+        elif partaion_type == "cal2":
+            start_address = self.cal2_start_addr
+            length=self.cal2_data_length
+        else:
+            self.log("Invalid partition type")
+            return False
+        
         try:
             with self.client as client:
 
                 response = client.routine_control(
                     routine_id=0xFF00,
                     control_type=0x01,
-                    data=bytes([0x44]) + self.app_start_addr.to_bytes(4, 'big') + self.app_data_length.to_bytes(4, 'big')
+                    data=bytes([0x44]) + start_address.to_bytes(4, 'big') + length.to_bytes(4, 'big')
                 )
                 
                 if not response:
@@ -413,6 +456,10 @@ class FlashingProcess:
                     return False
                     
                 if response.positive:
+                    self.log(f"Earse response is {response.data.hex().upper()}")
+                    if response.data.hex().upper().startswith('01FF0001'):
+                        self.log("Memory erase failed - received 7101FF0001")
+                        return False
                     self.log("Memory erase successful")
                     return True
                     
@@ -539,19 +586,64 @@ class FlashingProcess:
         except Exception as e:
             self.log(f"Fault memory clear exception: {str(e)}")
             return False
-    def execute_flashing_sequence(self, zone_type: str, sbl_hex_path: str, app_hex_path: str) -> bool:
+    def execute_flashing_sequence(self, zone_type: str, cal_is_must: bool, flash_config: dict) -> bool:
 
         self.log("Start executing flashing sequence...")
         self.log(f"Zone type: {zone_type}")
-        self.log(f"SBL hex path: {sbl_hex_path}")
-        self.log(f"APP hex path: {app_hex_path}")
+        self.log(f"Calibration is must: {cal_is_must}")
+        self.log(f"Flash config details:\n{json.dumps(flash_config, indent=2, default=str)}")
         
+        if cal_is_must:
+            self.log("Checking calibration...")
+            cal1_hex_path = flash_config.get('cal1_hex')
+            if not cal1_hex_path:
+                self.log("Error: CAL1 HEX path not found in flash config")
+                return False 
+        
+            cal1_sig_path = cal1_hex_path.rsplit('.', 1)[0] + '.rsa'
+            if not os.path.exists(cal1_sig_path):
+                self.log(f"Warning: Signature file not found: {cal1_sig_path}")
+                self.cal1_sig_data = bytes([0xAA] * 512)
+            else:
+                self.cal1_sig_data = self.read_signature_file(cal1_sig_path)
+                if not self.cal1_sig_data:
+                    self.log("Failed to read SBL signature file")
+                    return False
+
+            self.cal1_data, self.cal1_start_addr, self.cal1_data_length = self.read_hex_file(cal1_hex_path)
+            if not self.cal1_data:
+                self.log("Failed to read CAL1 HEX file") 
+                return False
+        
+            cal2_hex_path = flash_config.get('cal2_hex')
+            if not cal1_hex_path:
+                self.log("Error: CAL1 HEX path not found in flash config")
+                return False 
+        
+            cal2_sig_path = cal2_hex_path.rsplit('.', 1)[0] + '.rsa'
+            if not os.path.exists(cal2_sig_path):
+                self.log(f"Warning: Signature file not found: {cal2_sig_path}")
+                self.cal2_sig_data = bytes([0xAA] * 512)
+            else:
+                self.cal2_sig_data = self.read_signature_file(cal2_hex_path)
+                if not self.cal2_sig_data:
+                    self.log("Failed to read SBL signature file")
+                    return False
+
+            self.cal2_data, self.cal2_start_addr, self.cal2_data_length = self.read_hex_file(cal2_hex_path)
+            if not self.cal2_data:
+                self.log("Failed to read CAL2 HEX file") 
+                return False
+                
+        sbl_hex_path = flash_config.get('sbl_hex')
+        if not sbl_hex_path:
+            self.log("Error: SBL HEX path not found in flash config")
+            return False
+    
         sbl_sig_path = sbl_hex_path.rsplit('.', 1)[0] + '.rsa'
         if not os.path.exists(sbl_sig_path):
             self.log(f"Warning: Signature file not found: {sbl_sig_path}")
-            self.log("Generating default 512-byte signature data")
             self.sbl_sig_data = bytes([0xAA] * 512)
-            self.log(f"Generated default signature data (first 16 bytes): {self.sbl_sig_data[:16].hex().upper()}")
         else:
             self.sbl_sig_data = self.read_signature_file(sbl_sig_path)
             if not self.sbl_sig_data:
@@ -563,12 +655,15 @@ class FlashingProcess:
             self.log("Failed to read SBL HEX file") 
             return False
 
+        app_hex_path = flash_config.get('app_hex')
+        if not app_hex_path:
+            self.log("Error: APP HEX path not found in flash config")
+            return False
+        
         app_sig_path = app_hex_path.rsplit('.', 1)[0] + '.rsa'
         if not os.path.exists(app_sig_path):
             self.log(f"Warning: Signature file not found: {app_sig_path}")
-            self.log("Generating default 512-byte signature data")
             self.app_sig_data = bytes([0xAA] * 512)
-            self.log(f"Generated default signature data (first 16 bytes): {self.app_sig_data[:16].hex().upper()}")
         else:
             self.app_sig_data = self.read_signature_file(app_sig_path)
             if not self.app_sig_data:
@@ -581,35 +676,76 @@ class FlashingProcess:
             return False
         
         try:
-            steps = [
-                lambda: self.change_session(0x01),                                
-                lambda: self.program_request_only_func(bytes.fromhex('1083')),
-                self.enter_extended_session,        
-                lambda: self.program_request_only_func(bytes.fromhex('8582')),
-                lambda: self.program_request_only_func(bytes.fromhex('288303')),
-                lambda: self.change_session(0x70),  
-                lambda: self.enable_check_bypass(routainid = 0x55B0, data=bytes.fromhex('00')),                             
-                lambda: self.enable_check_bypass(routainid = 0x55B1, data=bytes.fromhex('01')),                             
-                lambda: self.security_access(zone_type),       
-                self.check_programming_status,                                   
-                self.write_f184_identifier,                                       
-                lambda:self.request_download(download_type = 'sbl'),           
-                lambda:self.transfer_hex_data(data_type = 'sbl'),           
-                lambda:self.exit_transfer(),                                          
-                lambda:self.transfer_signature(data_type = 'sbl'),                 
-                self.erase_memory,                                             
-                lambda:self.request_download(download_type = 'app'),                            
-                lambda:self.transfer_hex_data(data_type = 'app'),                                         
-                lambda:self.exit_transfer(),                                            
-                lambda:self.transfer_signature(data_type = 'app'), 
-                self.complete_flash_process,               #3101FF01                     
-                lambda: self.program_request_only_func(bytes.fromhex('288003')),
-                self.reset_ecu,       
-                lambda: self.change_session(0x03),                                
-                self.fault_memory_clear,        
-                lambda: self.program_request_only_func(bytes.fromhex('8581')),
-                lambda: self.program_request_only(bytes.fromhex('1081')),
-            ]
+            if not cal_is_must:
+                steps = [
+                    lambda: self.change_session(0x01),                                
+                    lambda: self.program_request_only_func(bytes.fromhex('1083')),
+                    self.enter_extended_session,        
+                    lambda: self.program_request_only_func(bytes.fromhex('8582')),
+                    lambda: self.program_request_only_func(bytes.fromhex('288303')),
+                    lambda: self.change_session(0x70),  
+                    lambda: self.enable_check_bypass(routainid = 0x55B0, data=bytes.fromhex('00')),                             
+                    lambda: self.enable_check_bypass(routainid = 0x55B1, data=bytes.fromhex('01')),                             
+                    lambda: self.security_access(zone_type),       
+                    self.check_programming_status,                                   
+                    self.write_f184_identifier,                                       
+                    lambda:self.request_download(download_type = 'sbl'),           
+                    lambda:self.transfer_hex_data(data_type = 'sbl'),           
+                    lambda:self.exit_transfer(),                                          
+                    lambda:self.transfer_signature(data_type = 'sbl'),                 
+                    lambda:self.erase_memory('app'),                                             
+                    lambda:self.request_download(download_type = 'app'),                            
+                    lambda:self.transfer_hex_data(data_type = 'app'),                                         
+                    lambda:self.exit_transfer(),                                            
+                    lambda:self.transfer_signature(data_type = 'app'), 
+                    self.complete_flash_process,               #3101FF01                     
+                    lambda: self.program_request_only_func(bytes.fromhex('288003')),
+                    self.reset_ecu,       
+                    lambda: self.change_session(0x03),                                
+                    self.fault_memory_clear,        
+                    lambda: self.program_request_only_func(bytes.fromhex('8581')),
+                    lambda: self.program_request_only(bytes.fromhex('1081')),
+                ]
+            else:
+                steps = [
+                    lambda: self.change_session(0x01),                                
+                    lambda: self.program_request_only_func(bytes.fromhex('1083')),
+                    self.enter_extended_session,        
+                    lambda: self.program_request_only_func(bytes.fromhex('8582')),
+                    lambda: self.program_request_only_func(bytes.fromhex('288303')),
+                    lambda: self.change_session(0x70),  
+                    lambda: self.enable_check_bypass(routainid = 0x55B0, data=bytes.fromhex('00')),                             
+                    lambda: self.enable_check_bypass(routainid = 0x55B1, data=bytes.fromhex('01')),                             
+                    lambda: self.security_access(zone_type),       
+                    self.check_programming_status,                                   
+                    self.write_f184_identifier,                                       
+                    lambda:self.request_download(download_type = 'sbl'),           
+                    lambda:self.transfer_hex_data(data_type = 'sbl'),           
+                    lambda:self.exit_transfer(),                                          
+                    lambda:self.transfer_signature(data_type = 'sbl'),
+                    lambda:self.erase_memory('cal1'),                                             
+                    lambda:self.request_download(download_type = 'cal1'),                            
+                    lambda:self.transfer_hex_data(data_type = 'cal1'),                                         
+                    lambda:self.exit_transfer(),                                            
+                    lambda:self.transfer_signature(data_type = 'cal1'),
+                    lambda:self.erase_memory('cal2'),                                             
+                    lambda:self.request_download(download_type = 'cal2'),                            
+                    lambda:self.transfer_hex_data(data_type = 'cal2'),                                         
+                    lambda:self.exit_transfer(),                                            
+                    lambda:self.transfer_signature(data_type = 'cal2'),           
+                    lambda:self.erase_memory('app'),                                             
+                    lambda:self.request_download(download_type = 'app'),                            
+                    lambda:self.transfer_hex_data(data_type = 'app'),                                         
+                    lambda:self.exit_transfer(),                                            
+                    lambda:self.transfer_signature(data_type = 'app'), 
+                    self.complete_flash_process,           
+                    lambda: self.program_request_only_func(bytes.fromhex('288003')),
+                    self.reset_ecu,       
+                    lambda: self.change_session(0x03),                                
+                    self.fault_memory_clear,        
+                    lambda: self.program_request_only_func(bytes.fromhex('8581')),
+                    lambda: self.program_request_only(bytes.fromhex('1081')),
+                ]
             
             for i, step in enumerate(steps, 1):
                 self.log(f"Executing step {i}/{len(steps)}")

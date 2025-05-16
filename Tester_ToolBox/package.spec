@@ -11,7 +11,7 @@ shared_analysis = Analysis(
         ('reference_modules/python-can-isotp', 'reference_modules/python-can-isotp'),
         ('reference_modules/python-udsoncan', 'reference_modules/python-udsoncan'),
         ('assets/icon.ico', 'assets'),
-        ('readme.md', '.')  # 修改目标路径为当前目录
+        ('readme.md', '.'),
     ],
     hiddenimports=[
         'can',
@@ -65,5 +65,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='Chery_DiagnosticToolBox_V1.0.0.1' 
+    name='Chery_DiagnosticToolBox_V1.0.0.2' 
 )

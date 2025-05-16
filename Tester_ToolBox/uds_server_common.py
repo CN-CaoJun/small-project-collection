@@ -155,8 +155,7 @@ class ISOTPLayer:
             level=logging.DEBUG,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.FileHandler('isotp_layer.log', encoding='utf-8'),
-                logging.StreamHandler()
+                logging.FileHandler('log/isotp_layer.log', encoding='utf-8'),
             ]
         )
         
@@ -185,7 +184,7 @@ class ISOTPLayer:
                 'blocksize': 0,
                 'override_receiver_stmin': None,
                 'wftmax': 4,
-                'tx_data_length': 8,      # 标准CAN使用8字节
+                'tx_data_length': 8,      
                 'tx_data_min_length': 8,
                 'tx_padding': 0x00,
                 'rx_flowcontrol_timeout': 1000,
