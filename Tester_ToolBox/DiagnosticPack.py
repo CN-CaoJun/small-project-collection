@@ -82,7 +82,7 @@ class DiagnosticPack:
         self.stmin_entry.pack()
         
         # Add 10 pixel spacing
-        ttk.Frame(self.params_container, width=10).pack(side=tk.LEFT)
+        ttk.Frame(self.params_container, width=40).pack(side=tk.LEFT)
         
         # BLOCKSIZE settings
         self.block_frame = ttk.Frame(self.params_container)
@@ -93,7 +93,7 @@ class DiagnosticPack:
         self.block_entry.pack()
         
         # Add 10 pixel spacing
-        ttk.Frame(self.params_container, width=10).pack(side=tk.LEFT)
+        ttk.Frame(self.params_container, width=40).pack(side=tk.LEFT)
         
         # PADDING settings
         self.padding_frame = ttk.Frame(self.params_container)
@@ -103,8 +103,17 @@ class DiagnosticPack:
         self.padding_entry.insert(0, "0x00")
         self.padding_entry.pack()
         
+        ttk.Frame(self.params_container, width=40).pack(side=tk.LEFT)
+        # PADDING settings
+        self.wftmax_frame = ttk.Frame(self.params_container)
+        self.wftmax_frame.pack(side=tk.LEFT)
+        ttk.Label(self.wftmax_frame, text="wftmax:").pack(anchor=tk.W)  # Use anchor=tk.W for left alignment
+        self.wftmax_entry = ttk.Entry(self.wftmax_frame, width=8)
+        self.wftmax_entry.insert(0, "0x04")
+        self.wftmax_entry.pack()
+        
         # Add 10 pixel spacing
-        ttk.Frame(self.params_container, width=5).pack(side=tk.LEFT)
+        ttk.Frame(self.params_container, width=22).pack(side=tk.LEFT)
 
         # Add Operation tag and button frame
         self.operation_frame = ttk.Frame(self.params_container)
@@ -116,7 +125,10 @@ class DiagnosticPack:
         button_container = ttk.Frame(self.operation_frame)
         button_container.pack(fill=tk.X, expand=True)
         
-        # Enable Diag按钮放在容器的右侧
+        # 添加占位框架将按钮推到右侧
+        spacer_frame = ttk.Frame(button_container)
+        spacer_frame.pack(side=tk.LEFT, expand=True, fill=tk.X)
+        
         self.enable_button = ttk.Checkbutton(
             button_container,
             text="Enable Diag",
@@ -138,7 +150,6 @@ class DiagnosticPack:
         self.msg_input = ttk.Entry(self.input_container, validate="key", 
                                  validatecommand=(self.parent.register(self.on_hex_input), '%P'))
         self.msg_input.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
-        # 添加回车键绑定
         self.msg_input.bind('<Return>', lambda event: self.send_message())
         
         ttk.Label(self.input_container, text="(Hex: 11 22 33)").pack(side=tk.LEFT)
@@ -209,6 +220,7 @@ class DiagnosticPack:
             stmin = int(self.stmin_entry.get(), 16)
             blocksize = int(self.block_entry.get(), 16)
             padding = int(self.padding_entry.get(), 16)
+            wftmax = int(self.wftmax_entry.get(), 16)
             
             # get the selected ECU from the dropdown menu
             selected_ecu = self.ecu_var.get()
@@ -232,7 +244,7 @@ class DiagnosticPack:
                     'blocksize': blocksize,
                     'tx_padding': padding,
                     'override_receiver_stmin': None,
-                    'wftmax': 4,
+                    'wftmax': wftmax,
                     'tx_data_length': 64,
                     'tx_data_min_length':8,
                     'rx_flowcontrol_timeout': 1000,
@@ -252,7 +264,7 @@ class DiagnosticPack:
                     'blocksize': blocksize,
                     'tx_padding': padding,
                     'override_receiver_stmin': None,
-                    'wftmax': 4,
+                    'wftmax': wftmax,
                     'tx_data_length': 8,
                     'tx_data_min_length':8,
                     'rx_flowcontrol_timeout': 1000,

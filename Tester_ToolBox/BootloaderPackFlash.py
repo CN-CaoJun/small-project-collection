@@ -49,7 +49,6 @@ class FlashingProcess:
         
         self.max_block_size = 0
     def log(self, message: str):
-        """输出日志"""
         if self.trace_handler:
             self.trace_handler(message)
     def read_signature_file(self, file_path: str) -> Optional[bytes]:

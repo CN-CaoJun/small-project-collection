@@ -578,8 +578,8 @@ class BootloaderPack:
         """Toggle between ZCU-R and ZCU-L UDS IDs"""
         if self.currents_id['Zone'] == "RZCU":
             self.currents_id['Zone'] = "LZCU"
-            self.currents_id['txid'] = 0x737
-            self.currents_id['rxid'] = 0x7b7
+            self.currents_id['txid'] = 0x734
+            self.currents_id['rxid'] = 0x7b4
             self.target_zone_label.config(text="Target Zone is ZCU-L")
         else:
             self.currents_id['Zone'] = "RZCU"

@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(0, 0, 0, 2),
-    prodvers=(0, 0, 0, 2),
+    filevers=(1, 0, 0, 1),
+    prodvers=(1, 0, 0, 1),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -15,12 +15,12 @@ VSVersionInfo(
         u'040904B0',
         [StringStruct(u'CompanyName', u'© APTIV Co., Ltd.'),
         StringStruct(u'FileDescription', u'Diagnostic Tool Box'),
-        StringStruct(u'FileVersion', u'0.0.0.1'),
+        StringStruct(u'FileVersion', u'1.0.0.1'),
         StringStruct(u'InternalName', u'DiagnosticToolBox'),
-        StringStruct(u'LegalCopyright', u'jun.cao@aptiv.com'),
+        StringStruct(u'LegalCopyright', u'jun.cao@aptiv.com, © APTIV Co., Ltd.'),
         StringStruct(u'OriginalFilename', u'Chery_DiagnosticToolBox.exe'),
         StringStruct(u'ProductName', u'ECU Diagnostic Tool'),
-        StringStruct(u'ProductVersion', u'0.0.0.2')])
+        StringStruct(u'ProductVersion', u'1.0.0.1')])
     ]),
     VarFileInfo([VarStruct(u'Translation', [0x0409, 0x04B0])])
   ]
