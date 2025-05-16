@@ -166,8 +166,7 @@ class FlashingProcess:
             self.log(f"Extended session exception: {str(e)}")
             return False
             
-    def security_access(self) -> bool:
-        """Step 4 and 5: Security access"""
+    def security_access(self, zone:str) -> bool:
         self.log("Step: Execute security access")
         try:
             with self.client as client:
@@ -184,7 +183,7 @@ class FlashingProcess:
                 
                 Calculate27 = SecurityKeyAlgorithm_Chery
                 
-                computed_key = Calculate27.calculate_security_key(Calculate27, zcu_type = "R", level= 0x11, seed = seed_recv)
+                computed_key = Calculate27.calculate_security_key(Calculate27, zcu_type = zone, level= 0x11, seed = seed_recv)
                 print(f"Key: 0x{computed_key}")
 
                 response = client.send_key(level=0x12, key=bytes.fromhex(computed_key))
@@ -198,22 +197,8 @@ class FlashingProcess:
             self.log(f"Security access exception: {str(e)}")
             return False
             
-    def write_f15a_identifier(self) -> bool:
-        try:
-            with self.client as client:
-                data = bytes.fromhex('73 05 08 7B 43 6C 7F 3F EC')
-                response = client.write_data_by_identifier(did=0xF15A, value=data)
-                
-                if response and response.positive:
-                    self.log("Has successfully written F15A identifier")
-                    return True
-                else:
-                    return False
-        except Exception as e:
-            self.log(f"Write F15A identifier exception: {str(e)}")
-            return False
-    
     def read_f0f0_identifier(self) -> bool:
+        self.log("Step: Read F0F0 identifier")
         try:
             with self.client as client:
                 response = client.write_data_by_identifier(did=0xF184, value=data)
@@ -227,6 +212,7 @@ class FlashingProcess:
             self.log(f"Write F15A identifier exception: {str(e)}")
             return False
     def write_f184_identifier(self) -> bool:
+        self.log("Step: Write F184 identifier")
         try:
             with self.client as client:
                 data = bytes.fromhex('19050E4F544130303120202020202020202020')
@@ -554,15 +540,24 @@ class FlashingProcess:
         except Exception as e:
             self.log(f"Fault memory clear exception: {str(e)}")
             return False
-    def execute_flashing_sequence(self, sbl_hex_path: str, app_hex_path: str) -> bool:
+    def execute_flashing_sequence(self, zone_type: str, sbl_hex_path: str, app_hex_path: str) -> bool:
 
         self.log("Start executing flashing sequence...")
+        self.log(f"Zone type: {zone_type}")
+        self.log(f"SBL hex path: {sbl_hex_path}")
+        self.log(f"APP hex path: {app_hex_path}")
         
         sbl_sig_path = sbl_hex_path.rsplit('.', 1)[0] + '.rsa'
-        self.sbl_sig_data = self.read_signature_file(sbl_sig_path)
-        if not self.sbl_sig_data:
-            self.log("Failed to read SBL signature file")
-            return False
+        if not os.path.exists(sbl_sig_path):
+            self.log(f"Warning: Signature file not found: {sbl_sig_path}")
+            self.log("Generating default 512-byte signature data")
+            self.sbl_sig_data = bytes([0xAA] * 512)
+            self.log(f"Generated default signature data (first 16 bytes): {self.sbl_sig_data[:16].hex().upper()}")
+        else:
+            self.sbl_sig_data = self.read_signature_file(sbl_sig_path)
+            if not self.sbl_sig_data:
+                self.log("Failed to read SBL signature file")
+                return False
 
         self.sbl_data, self.sbl_start_addr, self.sbl_data_length = self.read_hex_file(sbl_hex_path)
         if not self.sbl_data:
@@ -570,10 +565,16 @@ class FlashingProcess:
             return False
 
         app_sig_path = app_hex_path.rsplit('.', 1)[0] + '.rsa'
-        self.app_sig_data = self.read_signature_file(app_sig_path)
-        if not self.app_sig_data:
-            self.log("Failed to read APP signature file")
-            return False
+        if not os.path.exists(app_sig_path):
+            self.log(f"Warning: Signature file not found: {app_sig_path}")
+            self.log("Generating default 512-byte signature data")
+            self.app_sig_data = bytes([0xAA] * 512)
+            self.log(f"Generated default signature data (first 16 bytes): {self.app_sig_data[:16].hex().upper()}")
+        else:
+            self.app_sig_data = self.read_signature_file(app_sig_path)
+            if not self.app_sig_data:
+                self.log("Failed to read APP signature file")
+                return False
         
         self.app_data, self.app_start_addr, self.app_data_length = self.read_hex_file(app_hex_path) 
         if not self.app_data:
@@ -590,7 +591,7 @@ class FlashingProcess:
                 lambda: self.change_session(0x70),  
                 lambda: self.enable_check_bypass(routainid = 0x55B0, data=bytes.fromhex('00')),                             
                 lambda: self.enable_check_bypass(routainid = 0x55B1, data=bytes.fromhex('01')),                             
-                self.security_access,       
+                lambda: self.security_access(zone_type),       
                 self.check_programming_status,                                   
                 self.write_f184_identifier,                                       
                 lambda:self.request_download(download_type = 'sbl'),           
@@ -617,8 +618,8 @@ class FlashingProcess:
                     self.log(f"Step {i} failed, terminating flashing sequence")
                     return False
                 if step == self.reset_ecu:
-                    self.log("Waiting 1 seconds after ECU reset...")
-                    time.sleep(1)
+                    self.log("Waiting 3 seconds after ECU reset...")
+                    time.sleep(3)
                     
             self.log("Flashing sequence completed")
             return True
@@ -627,8 +628,8 @@ class FlashingProcess:
             self.log(f"Flashing sequence exception terminated: {str(e)}")
     
 class SecurityKeyAlgorithm:
-    SECURITY_KKEY_L2 = 0x0000CDCA  # Level2算法密钥
-    SECURITY_KKEY_L4 = 0x00001D5C  # Level4算法密钥
+    SECURITY_KKEY_L2 = 0x0000CDCA  
+    SECURITY_KKEY_L4 = 0x00001D5C  
 
     @staticmethod
     def compute_level2(seed: int, keyk: int) -> int:
@@ -672,14 +673,14 @@ class SecurityKeyAlgorithm_Chery:
             0xE8, 0xDC, 0x8E, 0xC6, 0xBB, 0x24, 0x62, 0x8D
         ])
         try:
-            if zcu_type.upper() == 'R':
+            if zcu_type.upper() == 'RZCU':
                 if level == 0x01:
                     key = RZCU_SecurityAES128KEY1
                 elif level == 0x11:
                     key = RZCU_SecurityAES128KEY11
                 else:
                     raise ValueError(f"Invalid security level for RZCU: {level}")
-            elif zcu_type.upper() == 'L':
+            elif zcu_type.upper() == 'LZCU':
                 if level == 0x01:
                     key = LZCU_SecurityAES128KEY1
                 elif level == 0x11:

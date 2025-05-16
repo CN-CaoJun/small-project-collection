@@ -276,6 +276,7 @@ class BootloaderPack:
                 self.start_flash_btn.config(state=tk.DISABLED)
                 flashing = FlashingProcess(self.uds_client, self.uds_client_func,self.trace_handler)
                 success = flashing.execute_flashing_sequence(
+                    zone_type = self.currents_id['Zone'],
                     sbl_hex_path=self.flash_config['sbl_hex'],
                     app_hex_path=self.flash_config['app_hex']
                 )
@@ -331,14 +332,15 @@ class BootloaderPack:
                     version_str = data.decode('ascii', errors='ignore').strip()
                     # Update version information label in UI
                     self.version_label.config(
-                        text=f"{version_str[:32]}",
+                        text=f"{version_str[:11]}",
                         foreground="green"
                     )
                     # Log complete version information to trace handler
                     if self.ensure_trace_handler():
                         log_msg = (
                             f"Complete version information:\n"
-                            f"  Version: {version_str}\n"
+                            f"  Version: {version_str[:11]}\n"
+                            f"  Build Date: {version_str[11:]}\n"
                         )
                         self.trace_handler(log_msg)
                     return True
@@ -495,6 +497,14 @@ class BootloaderPack:
         )
         self.res_id_value.pack(side=tk.LEFT)
         
+        self.target_zone_label = ttk.Label(
+            self.uds_id_frame,
+            text="Target Zone is ZCU-R",
+            foreground="blue",
+            padding=(5,2)
+        )
+        self.target_zone_label.pack(side=tk.LEFT, padx=(20,10))
+        
         self.toggle_ids_btn = ttk.Button(
             self.uds_id_frame,
             text="Change Zone",
@@ -533,7 +543,7 @@ class BootloaderPack:
         # 添加开始刷写按钮
         self.start_flash_btn = ttk.Button(
             self.uds_control_frame,
-            text="Start Flashing",
+            text="Start Flash",
             command=self.start_flashing,
             state=tk.DISABLED  # 初始状态设置为禁用
         )
@@ -565,24 +575,18 @@ class BootloaderPack:
         )
         self.version_label.pack(side=tk.LEFT, padx=(10, 0))
     def toggle_uds_ids(self):
-        if self.currents_id['txid'] == 0x736:
-            self.currents_id['txid'] = 0x734 
-            self.currents_id['rxid'] = 0x7B4
-            self.currents_id['RZCU'] = False
-            self.currents_id['zone'] = 'LZCU'
+        """Toggle between ZCU-R and ZCU-L UDS IDs"""
+        if self.currents_id['Zone'] == "RZCU":
+            self.currents_id['Zone'] = "LZCU"
+            self.currents_id['txid'] = 0x737
+            self.currents_id['rxid'] = 0x7b7
+            self.target_zone_label.config(text="Target Zone is ZCU-L")
         else:
-            self.currents_id['txid'] = 0x736  
-            self.currents_id['rxid'] = 0x7B6
-            self.currents_id['RZCU'] = True
-            self.currents_id['zone'] = 'RZCU'
+            self.currents_id['Zone'] = "RZCU"
+            self.currents_id['txid'] = 0x736
+            self.currents_id['rxid'] = 0x7b6
+            self.target_zone_label.config(text="Target Zone is ZCU-R")
             
-        if  self.currents_id['RZCU'] == True:
-             self.req_id_label.config(text="RZCU Request ID: ")
-             self.res_id_label.config(text="RZCU Response ID: ")
-        else:
-             self.req_id_label.config(text="LZCU Request ID: ")
-             self.res_id_label.config(text="LZCU Response ID: ")
-         
         self.req_id_value.config(text=f"0x{self.currents_id['txid']:X}")
         self.res_id_value.config(text=f"0x{self.currents_id['rxid']:X}")
         

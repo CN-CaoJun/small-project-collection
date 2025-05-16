@@ -112,14 +112,18 @@ class DiagnosticPack:
         
         ttk.Label(self.operation_frame, text="  ").pack(anchor=tk.W)
         
-        # Enable Diag button
+        # 创建一个容器来包装按钮
+        button_container = ttk.Frame(self.operation_frame)
+        button_container.pack(fill=tk.X, expand=True)
+        
+        # Enable Diag按钮放在容器的右侧
         self.enable_button = ttk.Checkbutton(
-            self.operation_frame,  # Change to new frame container
+            button_container,
             text="Enable Diag",
             style="Toggle.TButton",
             command=self.on_enable_diag
         )
-        self.enable_button.pack(padx=(5,0))  # Adjust spacing
+        self.enable_button.pack(side=tk.RIGHT, padx=(5,0))
 
         
         # Message sending frame
