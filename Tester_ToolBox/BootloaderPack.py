@@ -51,13 +51,13 @@ class BootloaderPack:
                     self.trace_handler("Error: CAN bus not initialized")
                 return False
             
-            logging.basicConfig(
-                level=logging.DEBUG,
-                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                handlers=[
-                    logging.FileHandler('log/bootloader_flash.log', encoding='utf-8'),  
-                ]
-            )
+            # logging.basicConfig(
+            #     level=logging.DEBUG,
+            #     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            #     handlers=[
+            #         logging.FileHandler('log/bootloader_flash.log', encoding='utf-8'),  
+            #     ]
+            # )
             
             # Configure ISO-TP parameters
             if isfd:
@@ -415,7 +415,7 @@ class BootloaderPack:
         
         # Create calibration files frame
         # Create calibration frame with checkbox
-        self.cal_frame = ttk.LabelFrame(self.file_frame, text="Calibration Files")
+        self.cal_frame = ttk.LabelFrame(self.file_frame)
         self.enable_cal_var = tk.BooleanVar(value=False)
         self.enable_cal_check = ttk.Checkbutton(
             self.cal_frame,
@@ -441,7 +441,7 @@ class BootloaderPack:
             width=30,
             anchor="w",
             padding=(5,2),
-            state='disabled'  # Initially disabled
+            state='disabled' 
         )
         self.cal1_path_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
@@ -450,7 +450,7 @@ class BootloaderPack:
             text="Select CAL1",
             command=lambda: self.select_file('cal1'),
             width=15,
-            state='disabled'  # Initially disabled
+            state='disabled' 
         )
         self.cal1_select_btn.pack(side=tk.RIGHT, padx=5)
         

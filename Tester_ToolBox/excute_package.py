@@ -66,6 +66,15 @@ def build_package():
         shutil.copy2(license_src, license_dst)
     else:
         print("Warning: LICENSE file not found in source directory")
+        
+        # Copy LICENSE file to distribution folder
+    readme_src = "readme.md"
+    readme_dst = os.path.join("dist", folder_name, "readme.md")
+    if os.path.exists(readme_src):
+        print(f"Copying readme file to: {readme_dst}")
+        shutil.copy2(readme_src, readme_dst)
+    else:
+        print("Warning: readme file not found in source directory")
     
     print("Operation completed")
 
