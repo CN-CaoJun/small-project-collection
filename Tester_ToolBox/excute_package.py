@@ -4,6 +4,8 @@ import re
 import shutil
 import threading
 import sys
+import markdown
+import pdfkit
 
 def output_reader(pipe, prefix=''):
     """Helper function to read and print output from pipe"""
@@ -53,12 +55,11 @@ def build_package():
         print("Failed to parse version information from spec file")
         return
     
-    folder_name = collect_name_match.group(1)  # Use complete name defined in COLLECT section
+    folder_name = collect_name_match.group(1)  
     log_path = os.path.join("dist", folder_name, "log")
     print(f"Creating log directory: {log_path}")
     os.makedirs(log_path, exist_ok=True)
     
-    # Copy LICENSE file to distribution folder
     license_src = "LICENSE"
     license_dst = os.path.join("dist", folder_name, "LICENSE")
     if os.path.exists(license_src):
@@ -66,16 +67,30 @@ def build_package():
         shutil.copy2(license_src, license_dst)
     else:
         print("Warning: LICENSE file not found in source directory")
-        
-        # Copy LICENSE file to distribution folder
+
     readme_src = "readme.md"
-    readme_dst = os.path.join("dist", folder_name, "readme.md")
     if os.path.exists(readme_src):
-        print(f"Copying readme file to: {readme_dst}")
-        shutil.copy2(readme_src, readme_dst)
+        print("Converting README.md to PDF...")
+        try:
+            import convertpdf
+            pdf_path = os.path.join("dist", folder_name, "readme.pdf")
+            if convertpdf.convert_md_to_pdf(readme_src, pdf_path):
+                print(f"PDF created successfully: {pdf_path}")
+            else:
+                print("Warning: Failed to convert README to PDF")
+        except Exception as e:
+            print(f"Warning: Failed to convert README to PDF: {str(e)}")
     else:
-        print("Warning: readme file not found in source directory")
-    
+        print("Warning: README.md file not found in source directory")
+
+    pdf_src = pdf_path
+    pdf_dst = os.path.join("dist", folder_name, "readme.pdf")
+    if os.path.exists(pdf_src):
+        print(f"Copying readme.pdf file to: {pdf_dst}")
+        shutil.copy2(pdf_src, pdf_dst)
+    else:
+        print("Warning: readme.pdf file not found in source directory")
+
     print("Operation completed")
 
 if __name__ == "__main__":
