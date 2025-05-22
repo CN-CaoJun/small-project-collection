@@ -1,3 +1,4 @@
+from cgitb import text
 import logging
 import tkinter as tk
 from tkinter import ttk
@@ -415,7 +416,7 @@ class BootloaderPack:
         
         # Create calibration files frame
         # Create calibration frame with checkbox
-        self.cal_frame = ttk.LabelFrame(self.file_frame)
+        self.cal_frame = ttk.LabelFrame(self.file_frame, text = "Choose if select CAL files")
         self.enable_cal_var = tk.BooleanVar(value=False)
         self.enable_cal_check = ttk.Checkbutton(
             self.cal_frame,

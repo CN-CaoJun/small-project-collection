@@ -1,58 +1,74 @@
-# BDU Diagnostic ToolBox
-## Overview
-BDU Diagnostic ToolBox is a comprehensive diagnostic tool designed for automotive ECU testing and programming. It provides a user-friendly interface for CAN communication, UDS diagnostics, and bootloader operations.
+# Chery ZCU Diagnostic ToolBox
 
-## Features
-- Multi-protocol CAN interface support (Vector, PCAN, SLCAN, SocketCAN)
-- UDS diagnostic services
-- ECU bootloader programming capabilities
-- Real-time message tracing
-- CAN/CAN-FD communication support
-## System Requirements
-- Windows Operating System
-- Python 3.7 (if running from source)
-- Compatible CAN hardware interface
-## Hardware Support
-- Vector CAN interfaces
-- PCAN-USB devices
-- SLCAN compatible devices
-- SocketCAN (Linux)
-## Installation
-1. Download the latest release from the releases page
-2. Extract the package to your desired location
-3. Run the executable BDU_DiagnosticToolBox.exe
-## Usage Guide
-### Connection Setup
-1. Connect your CAN hardware interface
-2. Launch the application
-3. Click "Scan" to detect available CAN interfaces
-4. Select your CAN interface from the dropdown list
-5. Configure the baudrate parameters
-6. Enable CAN-FD if required
-7. Click "Initialize" to establish connection
-### Diagnostic Operations
-1. Select the target ECU from the diagnostic configuration
-2. Use the service buttons to perform diagnostic operations:
-   - Read DTCs
-   - Clear DTCs
-   - Read Data by Identifier
-   - Write Data by Identifier
-   - ECU Reset
-   - Security Access
-### Bootloader Operations
-1. Select SBL and APP hex files using the file selection buttons
-2. Verify file paths are correctly displayed
-3. Click "Start Flash" to begin the programming sequence
-4. Monitor the progress in the trace window
-5. Wait for completion confirmation
-### Message Tracing
-- All operations are logged in the trace window
-- Messages include timestamps and detailed information
-- Use for debugging and operation verification
+## Introduction
+Chery ZCU Diagnostic ToolBox is a specialized software toolkit developed by Aptiv for Chery Automobile, specifically designed for automotive ECU diagnostics and flashing verification. This tool supports UDS diagnostic communication via CAN bus, enabling ECU flashing and parameter configuration functionalities. As a dedicated solution for Chery's ZCU (Zone Control Unit) development and validation, it ensures reliable and efficient ECU programming and testing processes.
+**Key Features:**
 
-## Support
-For technical support or bug reports, please contact:
+   - Support for standard CAN and CAN-FD communication
+   - UDS diagnostic protocol support
+   - Independent or combined flashing of APP and CAL partitions
+   - Signature verification functionality
+   - Complete flashing process control
+   - Comprehensive flashing process logging
 
-- Email: jun.cao@aptiv.com
+## Operation Instructions
+
+### Environment Requirements
+- Windows 10 or later
+- Supported CAN adapter hardware
+   - Vector CAN Hardware
+   - PeakCAN Hardware
+   - USB2CAN Hardware(under developing)
+### Basic Operation Process (based on Vector Hardware)
+
+`Step 1`: Vector Channel Configuration
+
+Configure the specific Vector CAN channel by assigning `CANalyzer CANX` in the `Vector Hardware Config` application. Ensure the CANalyzer channel number matches the physical channel number, as shown in the figure below:
+
+![image-20250522184717560](./${pics}/image-20250522184717560.png) 
+
+The channel assignment result should appear as follows:
+
+![image-20250522185000228](./${pics}/image-20250522185000228.png) 
+
+`Step 2`: Initialize Vector CAN Channel Connection
+
+After proper channel assignment, launch the application to proceed with operations:
+
+![image-20250522184811801](./${pics}/image-20250522184811801.png) 
+
+Note: Successful initialization can only be achieved with the correct channel number selection:
+
+![image-20250522184900201](./${pics}/image-20250522184900201.png) 
+
+`Step 3`: Establish UDS Client Connection
+
+Once the connection is established, select the appropriate firmware based on your requirements and initiate the flashing process:
+
+![image-20250522185230621](./${pics}/image-20250522185230621.png) 
+
+### Precautions
+
+1. Ensure stable power supply during flashing
+2. Recommend backing up existing data before flashing
+3. Strictly follow the operation process, avoid interruption
+4. Check logs for fault diagnosis in case of exceptions
 ## License
-© APTIV Co., Ltd. All rights reserved.
+
+```shell
+APTIV PROPRIETARY SOFTWARE LICENSE
+
+Copyright (c) 2025 APTIV. All rights reserved.
+Contact: jun.cao@aptiv.com
+
+This software and all associated documentation ("Software") are the exclusive property 
+of APTIV. All intellectual property rights, including but not limited to copyrights, 
+patents, and trade secrets, are owned by APTIV.
+
+Unauthorized copying, modification, distribution, or use of this Software is strictly 
+prohibited without prior written permission from APTIV.
+
+THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND. APTIV SHALL NOT BE 
+LIABLE
+```
+

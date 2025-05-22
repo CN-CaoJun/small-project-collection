@@ -68,22 +68,7 @@ def build_package():
     else:
         print("Warning: LICENSE file not found in source directory")
 
-    readme_src = "readme.md"
-    if os.path.exists(readme_src):
-        print("Converting README.md to PDF...")
-        try:
-            import convertpdf
-            pdf_path = os.path.join("dist", folder_name, "readme.pdf")
-            if convertpdf.convert_md_to_pdf(readme_src, pdf_path):
-                print(f"PDF created successfully: {pdf_path}")
-            else:
-                print("Warning: Failed to convert README to PDF")
-        except Exception as e:
-            print(f"Warning: Failed to convert README to PDF: {str(e)}")
-    else:
-        print("Warning: README.md file not found in source directory")
-
-    pdf_src = pdf_path
+    pdf_src = "readme.pdf"
     pdf_dst = os.path.join("dist", folder_name, "readme.pdf")
     if os.path.exists(pdf_src):
         print(f"Copying readme.pdf file to: {pdf_dst}")

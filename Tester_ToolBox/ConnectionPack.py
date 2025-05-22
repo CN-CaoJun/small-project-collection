@@ -155,27 +155,27 @@ class ConnectionPack:
             except Exception as e:
                 self.log(f"PCAN scan error: {str(e)}")
 
-            try:
-                from can.interfaces import slcan
-                from serial.tools.list_ports import comports
+            # try:
+            #     from can.interfaces import slcan
+            #     from serial.tools.list_ports import comports
                 
-                for port in comports():
-                    self.log(f"Found port: {port.device}, location: {port.location}")
-                    if port.location is not None:
-                        channel_name = f"SLCAN: {port.device}"
-                        channel_list.append(channel_name)
-                        self.channel_configs[channel_name] = {
-                            'type': 'slcan',
-                            'port': port.device,
-                            'description': port.description,
-                            'hwid': port.hwid
-                        }
-                        self.log(f"SLCAN Device Info - Port: {port.device}")
-                        self.log(f"Description: {port.description}")
-                        self.log(f"Hardware ID: {port.hwid}\n")
+            #     for port in comports():
+            #         self.log(f"Found port: {port.device}, location: {port.location}")
+            #         if port.location is not None:
+            #             channel_name = f"SLCAN: {port.device}"
+            #             channel_list.append(channel_name)
+            #             self.channel_configs[channel_name] = {
+            #                 'type': 'slcan',
+            #                 'port': port.device,
+            #                 'description': port.description,
+            #                 'hwid': port.hwid
+            #             }
+            #             self.log(f"SLCAN Device Info - Port: {port.device}")
+            #             self.log(f"Description: {port.description}")
+            #             self.log(f"Hardware ID: {port.hwid}\n")
                         
-            except Exception as e:
-                self.log(f"SLCAN scan error: {str(e)}")
+            # except Exception as e:
+            #     self.log(f"SLCAN scan error: {str(e)}")
 
             # Update UI
             if channel_list:

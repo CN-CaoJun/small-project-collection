@@ -19,8 +19,8 @@ class MainWindow(tk.Tk):
     def __init__(self):
         super().__init__()
         
-        self.title("Chery ZCU Diagnostic ToolBox V1.0.0.2")
-        self.geometry("750x900")
+        self.title("Chery ZCU Diagnostic ToolBox V1.0.0.3")
+        self.geometry("768x800")
         
         icon_path = os.path.join(os.path.dirname(__file__), 'assets', 'icon.ico')
         if os.path.exists(icon_path):
@@ -48,7 +48,7 @@ class MainWindow(tk.Tk):
         
         # init all modules
         self.init_connection_pack()
-        self.init_diagnostic_pack()
+        # self.init_diagnostic_pack()
         self.init_bootloader_pack()
         self.init_trace_pack()
         
