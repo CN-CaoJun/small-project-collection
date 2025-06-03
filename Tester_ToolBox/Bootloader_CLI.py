@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath("reference_modules/python-can-isotp"))
 sys.path.insert(0, os.path.abspath("reference_modules/python-udsoncan"))
 
 import can
+from can.interface import Bus
 import isotp
 import udsoncan
 from can.interfaces.vector import canlib
@@ -16,23 +17,7 @@ from udsoncan.connections import PythonIsoTpConnection
 from udsoncan.client import Client
 import udsoncan.configs
 from BootloaderPackFlash import FlashingProcess
-
-class FlexRawData:
-    """Flexible raw data codec for UDS data identifiers"""
-    def __init__(self, length):
-        self.length = length
-    
-    def encode(self, data):
-        if isinstance(data, bytes):
-            return data[:self.length]
-        elif isinstance(data, str):
-            return data.encode('utf-8')[:self.length]
-        else:
-            return bytes(data)[:self.length]
-    
-    def decode(self, data):
-        return data
-
+from BootloaderPack import FlexRawData
 class BootloaderCLI:
     def __init__(self):
         self.can_bus = None
@@ -42,48 +27,41 @@ class BootloaderCLI:
         self.uds_client = None
         self.uds_client_func = None
         self.flash_process = None
+        self.flash_config = {}
         
     def log(self, message):
         """Print log message with timestamp"""
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         print(f"[{timestamp}] {message}")
         
-    def connect_vector_can(self, app_name="Bootloader_CLI", channel=0):
+    def connect_vector_can(self, app_name:str, channel:int):
         """Connect to Vector CAN interface"""
-        try:
-            # Set application name
-            can.rc['app_name'] = app_name
-            
-            # Initialize Vector CAN
-            canlib.xldriver.xlOpenDriver()
-            vector_configs = canlib.get_channel_configs()
-            
-            if not vector_configs:
-                self.log("Error: No Vector CAN devices found")
-                return False
+        """Create Vector bus instance"""
+        # Set application name
+        can.rc['app_name'] = app_name
+        can.rc['channel'] = channel - 1
+        
+        can.rc['interface'] = 'vector'
+        can.rc['bustype'] = 'vector'
+        can.rc['fd'] = True  
+        can.rc['bitrate'] = 500000
+        can.rc['data_bitrate'] = 2000000
+        can.rc['tseg1_abr'] = 63
+        can.rc['tseg2_abr'] = 16
+        can.rc['sjw_abr'] = 16
+        can.rc['sam_abr'] = 1
+        can.rc['tseg1_dbr'] = 13
+        can.rc['tseg2_dbr'] = 6
+        can.rc['sjw_dbr'] = 6
                 
-            # Use the first available Vector device
-            config = vector_configs[0]
-            self.log(f"Using Vector device: {config.name} (Serial: {config.serial_number})")
-            
-            # Create CAN bus
-            self.can_bus = canlib.VectorBus(
-                channel=channel,
-                fd=False,
-                bitrate=500000,
-                tseg1_abr=63,
-                tseg2_abr=16,
-                sjw_abr=16
-            )
-            
-            self.log(f"Vector CAN connected successfully on channel {channel}")
+        try:
+            self.can_bus = Bus()
             return True
-            
         except Exception as e:
-            self.log(f"Failed to connect Vector CAN: {str(e)}")
+            print(f"Failed to initialize Vector bus: {e}")
             return False
     
-    def create_isotp_layer(self, tx_id=0x736, rx_id=0x7b6, func_tx_id=0x7DF, func_rx_id=0x7DE):
+    def create_isotp_layer(self, tx_id:int, rx_id:int, func_tx_id=0x7DF, func_rx_id=0x7DE):
         """Create ISO-TP layer"""
         try:
             if not self.can_bus:
@@ -92,21 +70,21 @@ class BootloaderCLI:
                 
             # Configure ISO-TP parameters
             isotp_params = {
-                'stmin': 0,
+                 'stmin': 0,
                 'blocksize': 0,
-                'tx_padding': 0x00,
                 'override_receiver_stmin': None,
                 'wftmax': 4,
-                'tx_data_length': 8,
+                'tx_data_length': 64,    
                 'tx_data_min_length': 8,
+                'tx_padding': 0xAA,
                 'rx_flowcontrol_timeout': 1000,
                 'rx_consecutive_frame_timeout': 100,
-                'can_fd': False,
+                'can_fd': True,
                 'max_frame_size': 4095,
                 'bitrate_switch': False,
                 'rate_limit_enable': False,
                 'listen_mode': False,
-                'blocking_send': False
+                'blocking_send': False   
             }
             
             # Create notifier
@@ -154,7 +132,8 @@ class BootloaderCLI:
             if not self.stack or not self.stack_func:
                 self.log("Error: ISO-TP stack not initialized")
                 return False
-                
+
+            
             # Create connections
             conn = PythonIsoTpConnection(self.stack)
             conn_func = PythonIsoTpConnection(self.stack_func)
@@ -191,7 +170,7 @@ class BootloaderCLI:
             self.log(f"Failed to create UDS client: {str(e)}")
             return False
     
-    def flash_target_node(self, firmware_folder, zone_type="RZCU", cal_is_must=False):
+    def flash_target_node(self, flash_config:dict, zone_type:str, cal_is_must:int):
         """Flash target node using FlashingProcess methods"""
         try:
             if not self.uds_client or not self.uds_client_func:
@@ -204,20 +183,15 @@ class BootloaderCLI:
                 uds_client_func=self.uds_client_func,
                 trace_handler=self.log
             )
-            
-            # Set firmware folder
-            self.flash_process.firmware_folder = firmware_folder
-            
             self.log(f"Starting flash process for zone: {zone_type}")
-            self.log(f"Firmware folder: {firmware_folder}")
             self.log(f"CAL is must: {cal_is_must}")
             
-            # Execute flashing process with 10-second intervals
-            success = self.flash_process.execute_flashing_process(
-                zone_type=zone_type,
-                cal_is_must=cal_is_must
-            )
-            
+            success = self.flash_process.execute_flashing_sequence(
+                    zone_type = zone_type,
+                    cal_is_must = cal_is_must,
+                    flash_config = flash_config,
+                )
+
             if success:
                 self.log("Flash process completed successfully!")
             else:
@@ -241,54 +215,181 @@ class BootloaderCLI:
             self.log(f"Cleanup error: {str(e)}")
 
 def main():
-    parser = argparse.ArgumentParser(description='Bootloader CLI Tool for Target Node Flashing')
-    parser.add_argument('--app-name', default='Bootloader_CLI', help='Vector CAN application name')
+    """Main function to execute the bootloader CLI tool"""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Bootloader CLI Tool for Target Node upgrade')
+    parser.add_argument('--app-name', default='CANalyzer', help='Vector CAN application name')
     parser.add_argument('--channel', type=int, default=0, help='Vector CAN channel (default: 0)')
-    parser.add_argument('--tx-id', type=lambda x: int(x, 0), default=0x736, help='ISO-TP TX ID (default: 0x736)')
-    parser.add_argument('--rx-id', type=lambda x: int(x, 0), default=0x7b6, help='ISO-TP RX ID (default: 0x7b6)')
-    parser.add_argument('--firmware-folder', required=True, help='Path to firmware folder')
-    parser.add_argument('--zone-type', default='RZCU', choices=['RZCU', 'LZCU', 'FZCU'], help='Zone type (default: RZCU)')
+    parser.add_argument('--zone-type', default='RZCU', choices=['RZCU', 'LZCU'], help='Target Node Select')
+    parser.add_argument('--sbl-file', required=True, help='Path to SBL (Secondary Bootloader) file')
+    parser.add_argument('--app-file', required=True, help='Path to APP (Application) file')
     parser.add_argument('--cal-is-must', action='store_true', help='CAL is mandatory')
     
     args = parser.parse_args()
     
-    cli = BootloaderCLI()
+    # Set TX ID and RX ID based on zone type
+    if args.zone_type == 'RZCU':
+        tx_id = 0x736
+        rx_id = 0x7B6
+    elif args.zone_type == 'LZCU':
+        tx_id = 0x734
+        rx_id = 0x7B4
+    else:
+        raise ValueError(f"Unsupported zone type: {args.zone_type}")
     
+    print(f"Zone Type: {args.zone_type}")
+    print(f"TX ID: 0x{tx_id:03X}")
+    print(f"RX ID: 0x{rx_id:03X}")
+    
+    # Initialize the bootloader CLI instance
+    cli = BootloaderCLI()
+        
     try:
-        # Step 1: Connect to Vector CAN
-        cli.log("Step 1: Connecting to Vector CAN...")
+        # ========================================
+        # PHASE 1: HARDWARE INITIALIZATION
+        # ========================================
+        
+        # Step 1.1: Initialize Vector CAN hardware interface
+        cli.log("------------------------------------------------")
+        cli.log("Phase 1: Hardware Initialization")
+        cli.log("Step 1.1: Initializing Vector CAN hardware interface...")
+        cli.log(f"  - {args.app_name} CAN {args.channel}")
+        
         if not cli.connect_vector_can(args.app_name, args.channel):
+            cli.log("ERROR: Failed to initialize Vector CAN hardware")
             return 1
-        time.sleep(10)  # 10-second interval
         
-        # Step 2: Create ISO-TP layer
-        cli.log("Step 2: Creating ISO-TP layer...")
-        if not cli.create_isotp_layer(args.tx_id, args.rx_id):
+        cli.log("SUCCESS: Vector CAN hardware initialized successfully")
+        time.sleep(3)  # Allow hardware to stabilize
+        
+        # Step 1.2: Verify CAN bus connectivity
+        cli.log("Step 1.2: Verifying CAN bus connectivity...")
+        if not cli.can_bus:
+            cli.log("ERROR: CAN bus object is not available")
             return 1
-        time.sleep(10)  # 10-second interval
         
-        # Step 3: Create UDS client
-        cli.log("Step 3: Creating UDS client...")
+        cli.log("SUCCESS: CAN bus connectivity verified")
+        time.sleep(2)  # Brief pause for stability
+        
+        # ========================================
+        # PHASE 2: COMMUNICATION LAYER SETUP
+        # ========================================
+        
+        # Step 2.1: Configure ISO-TP transport layer parameters
+        cli.log("------------------------------------------------")
+        cli.log("Phase 2: Communication Layer Setup")
+        cli.log("Step 2.1: Configuring ISO-TP transport layer...")
+        
+        if not cli.create_isotp_layer(tx_id, rx_id):
+            cli.log("ERROR: Failed to configure ISO-TP transport layer")
+            return 1
+        
+        cli.log("SUCCESS: ISO-TP transport layer configured successfully")
+        time.sleep(2)  # Allow transport layer to initialize
+        
+        # Step 2.2: Establish ISO-TP communication stacks
+        cli.log("Step 2.2: Establishing ISO-TP communication stacks...")
+        if not cli.stack or not cli.stack_func:
+            cli.log("ERROR: ISO-TP stacks are not properly initialized")
+            return 1
+        
+        cli.log("SUCCESS: ISO-TP communication stacks established")
+        time.sleep(2)  # Ensure stacks are ready
+        
+        # ========================================
+        # PHASE 3: UDS CLIENT INITIALIZATION
+        # ========================================
+        
+        # Step 3.1: Create UDS client connections
+        cli.log("------------------------------------------------")
+        cli.log("Phase 3: UDS Client Initialization")
+        cli.log("Step 3.1: Creating UDS client connections...")
+        cli.log("  - Configuring data identifiers and timeout parameters")
+        cli.log("  - Setting up physical and functional addressing clients")
+        
         if not cli.create_uds_client():
+            cli.log("ERROR: Failed to create UDS client connections")
             return 1
-        time.sleep(10)  # 10-second interval
         
-        # Step 4: Flash target node
-        cli.log("Step 4: Starting flash process...")
-        if not cli.flash_target_node(args.firmware_folder, args.zone_type, args.cal_is_must):
+        cli.log("SUCCESS: UDS client connections created successfully")
+        time.sleep(2)  # Allow clients to initialize
+        
+        # Step 3.2: Verify UDS client readiness
+        cli.log("Step 3.2: Verifying UDS client readiness...")
+        if not cli.uds_client or not cli.uds_client_func:
+            cli.log("ERROR: UDS clients are not properly initialized")
             return 1
-            
-        cli.log("All operations completed successfully!")
+        
+        cli.log("SUCCESS: UDS clients are ready for communication")
+        time.sleep(2)  # Final preparation pause
+        
+        # ========================================
+        # PHASE 4: FIRMWARE FLASHING PROCESS
+        # ========================================
+        
+        # Step 4.1: Initialize flashing process
+        cli.log("------------------------------------------------")
+        cli.log("Phase 4: Firmware Flashing Process")
+        cli.log("Step 4.1: Initializing firmware flashing process...")
+        cli.log(f"  - Target Zone: {args.zone_type}")
+        cli.log(f"  - CAL Mandatory: {args.cal_is_must}")
+        
+        # Step 4.2: Execute firmware flashing sequence
+        cli.log("Step 4.2: Executing firmware flashing sequence...")
+        # Prepare flash configuration with firmware files
+        flash_config = {
+            'sbl_hex': args.sbl_file,
+            'app_hex': args.app_file
+        }
+        
+        # Add CAL files to config if CAL is mandatory
+        if args.cal_is_must:
+            flash_config.update({
+                'cal1_hex': args.cal1_file,
+                'cal2_hex': args.cal2_file
+            })
+        
+        # Print flash configuration details
+        cli.log("Flash Configuration Details:")
+        for key, value in flash_config.items():
+            cli.log(f"  - {key}: {value}")
+        cli.log("----------------------------------------")
+        
+        if not cli.flash_target_node(flash_config, args.zone_type, args.cal_is_must):
+            cli.log("ERROR: Firmware flashing process failed")
+            return 1
+        
+        # Step 4.3: Verify flashing completion
+        cli.log("Step 4.3: Verifying flashing completion...")
+        cli.log("SUCCESS: Firmware flashing process completed successfully")
+        
+        # ========================================
+        # COMPLETION
+        # ========================================
+        
+        cli.log("========================================")
+        cli.log("ALL OPERATIONS COMPLETED SUCCESSFULLY!")
+        cli.log("Target node has been successfully updated")
+        cli.log("========================================")
         return 0
         
     except KeyboardInterrupt:
-        cli.log("Operation interrupted by user")
+        cli.log("========================================")
+        cli.log("OPERATION INTERRUPTED BY USER (Ctrl+C)")
+        cli.log("Cleaning up resources...")
+        cli.log("========================================")
         return 1
     except Exception as e:
-        cli.log(f"Unexpected error: {str(e)}")
+        cli.log("========================================")
+        cli.log(f"UNEXPECTED ERROR OCCURRED: {str(e)}")
+        cli.log("Please check the error details above")
+        cli.log("========================================")
         return 1
     finally:
+        # Always perform cleanup regardless of success or failure
+        cli.log("Performing final cleanup...")
         cli.cleanup()
+        cli.log("Cleanup completed")
 
 if __name__ == "__main__":
     sys.exit(main())
