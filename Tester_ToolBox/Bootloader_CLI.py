@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import sys
 import os
 import argparse
@@ -216,12 +215,12 @@ def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Bootloader CLI Tool for Target Node upgrade')
     parser.add_argument('--app-name', default='CANalyzer', help='Vector CAN application name')
-    parser.add_argument('--channel', type=int, default=0, help='Vector CAN channel (default: 0)')
+    parser.add_argument('--channel', type=int, default=1, help='Vector CAN channel (default: 0)')
     parser.add_argument('--zone-type', default='RZCU', choices=['RZCU', 'LZCU'], help='Target Node Select')
     parser.add_argument('--sbl-file', required=True, help='Path to SBL (Secondary Bootloader) file')
     parser.add_argument('--app-file', required=True, help='Path to APP (Application) file')
-    parser.add_argument('--cal1-file', required=True, help='Path to CAL 1 file')
-    parser.add_argument('--cal2-file', required=True, help='Path to CAL 2 file')
+    parser.add_argument('--cal1-file', default=None, help='Path to CAL 1 file')
+    parser.add_argument('--cal2-file', default=None,help='Path to CAL 2 file')
     parser.add_argument('--cal-is-must', action='store_true', help='CAL is mandatory')
     
     args = parser.parse_args()
