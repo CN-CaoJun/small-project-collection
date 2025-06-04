@@ -133,7 +133,6 @@ class BootloaderCLI:
                 self.log("Error: ISO-TP stack not initialized")
                 return False
 
-            
             # Create connections
             conn = PythonIsoTpConnection(self.stack)
             conn_func = PythonIsoTpConnection(self.stack_func)
@@ -191,12 +190,10 @@ class BootloaderCLI:
                     cal_is_must = cal_is_must,
                     flash_config = flash_config,
                 )
-
             if success:
                 self.log("Flash process completed successfully!")
             else:
                 self.log("Flash process failed!")
-                
             return success
             
         except Exception as e:
@@ -223,6 +220,8 @@ def main():
     parser.add_argument('--zone-type', default='RZCU', choices=['RZCU', 'LZCU'], help='Target Node Select')
     parser.add_argument('--sbl-file', required=True, help='Path to SBL (Secondary Bootloader) file')
     parser.add_argument('--app-file', required=True, help='Path to APP (Application) file')
+    parser.add_argument('--cal1-file', required=True, help='Path to CAL 1 file')
+    parser.add_argument('--cal2-file', required=True, help='Path to CAL 2 file')
     parser.add_argument('--cal-is-must', action='store_true', help='CAL is mandatory')
     
     args = parser.parse_args()
@@ -240,6 +239,7 @@ def main():
     print(f"Zone Type: {args.zone_type}")
     print(f"TX ID: 0x{tx_id:03X}")
     print(f"RX ID: 0x{rx_id:03X}")
+    print(f"If CAL is must: {args.cal_is_must}")
     
     # Initialize the bootloader CLI instance
     cli = BootloaderCLI()
@@ -350,7 +350,7 @@ def main():
             })
         
         # Print flash configuration details
-        cli.log("Flash Configuration Details:")
+        cli.log("Flash Fiels Details:")
         for key, value in flash_config.items():
             cli.log(f"  - {key}: {value}")
         cli.log("----------------------------------------")
