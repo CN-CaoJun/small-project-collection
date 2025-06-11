@@ -128,32 +128,32 @@ class ConnectionPack:
                     canlib.xldriver.xlCloseDriver()
 
             # Scan PCAN devices
-            try:
-                from can.interfaces.pcan.basic import (
-                    PCANBasic, PCAN_ERROR_OK, PCAN_NONEBUS,
-                    LOOKUP_DEVICE_TYPE, LOOKUP_DEVICE_ID,
-                    LOOKUP_CONTROLLER_NUMBER, LOOKUP_IP_ADDRESS,
-                    PCAN_CHANNEL_FEATURES, FEATURE_FD_CAPABLE
-                )
-                param_str = b'devicetype=PCAN_USB'
-                pcan = PCANBasic()
-                result = pcan.LookUpChannel(param_str)
+            # try:
+            #     from can.interfaces.pcan.basic import (
+            #         PCANBasic, PCAN_ERROR_OK, PCAN_NONEBUS,
+            #         LOOKUP_DEVICE_TYPE, LOOKUP_DEVICE_ID,
+            #         LOOKUP_CONTROLLER_NUMBER, LOOKUP_IP_ADDRESS,
+            #         PCAN_CHANNEL_FEATURES, FEATURE_FD_CAPABLE
+            #     )
+            #     param_str = b'devicetype=PCAN_USB'
+            #     pcan = PCANBasic()
+            #     result = pcan.LookUpChannel(param_str)
                 
-                if result[0] == PCAN_ERROR_OK:
-                    handle = result[1]
-                    if handle != PCAN_NONEBUS:
-                        feature_result = pcan.GetValue(handle, PCAN_CHANNEL_FEATURES)
-                        if feature_result[0] == PCAN_ERROR_OK:
-                            fd_support = (feature_result[1] & FEATURE_FD_CAPABLE) == FEATURE_FD_CAPABLE
-                            channel_name = f"PCAN: 0x{handle.value:02X} (FD support: {fd_support})"  # 添加.value获取实际值
-                            channel_list.append(channel_name)
-                            self.channel_configs[channel_name] = {
-                                'type': 'pcan',
-                                'handle': handle.value,  # 确保存储十六进制值
-                                'features': fd_support
-                            }
-            except Exception as e:
-                self.log(f"PCAN scan error: {str(e)}")
+            #     if result[0] == PCAN_ERROR_OK:
+            #         handle = result[1]
+            #         if handle != PCAN_NONEBUS:
+            #             feature_result = pcan.GetValue(handle, PCAN_CHANNEL_FEATURES)
+            #             if feature_result[0] == PCAN_ERROR_OK:
+            #                 fd_support = (feature_result[1] & FEATURE_FD_CAPABLE) == FEATURE_FD_CAPABLE
+            #                 channel_name = f"PCAN: 0x{handle.value:02X} (FD support: {fd_support})"  # 添加.value获取实际值
+            #                 channel_list.append(channel_name)
+            #                 self.channel_configs[channel_name] = {
+            #                     'type': 'pcan',
+            #                     'handle': handle.value,  # 确保存储十六进制值
+            #                     'features': fd_support
+            #                 }
+            # except Exception as e:
+            #     self.log(f"PCAN scan error: {str(e)}")
 
             # try:
             #     from can.interfaces import slcan
