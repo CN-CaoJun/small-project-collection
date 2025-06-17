@@ -1,19 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-import sys
 import os
-
-sys.path.insert(0, os.path.abspath("reference_modules/python-can"))
-sys.path.insert(0, os.path.abspath("reference_modules/python-can-isotp"))
-sys.path.insert(0, os.path.abspath("reference_modules/python-udsoncan"))
-
-import can
-import isotp
-import udsoncan
-from can.interfaces.vector import canlib, xlclass, xldefine
-from datetime import datetime
-import threading
-
 
 class MainWindow(tk.Tk):
     def __init__(self):
