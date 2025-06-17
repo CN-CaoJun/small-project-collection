@@ -7,11 +7,7 @@ sys.path.insert(0, os.path.abspath("reference_modules/python-can"))
 sys.path.insert(0, os.path.abspath("reference_modules/python-can-isotp"))
 sys.path.insert(0, os.path.abspath("reference_modules/python-udsoncan"))
 import can
-import isotp
-import udsoncan
-from can.interfaces.vector import canlib, xlclass, xldefine
-from datetime import datetime
-import threading
+from can.interfaces.vector import canlib
 
 class ConnectionPack:
     def __init__(self, parent):

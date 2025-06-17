@@ -4,12 +4,12 @@ block_cipher = None
 
 shared_analysis = Analysis(
     ['MainUI.py'],
-    pathex=[],
+    pathex=[os.path.abspath('reference_modules/python-can'), os.path.abspath('reference_modules/python-can-isotp'), os.path.abspath('reference_modules/python-udsoncan')],
     binaries=[],
     datas=[
-        ('reference_modules/python-can', 'reference_modules/python-can'),
-        ('reference_modules/python-can-isotp', 'reference_modules/python-can-isotp'),
-        ('reference_modules/python-udsoncan', 'reference_modules/python-udsoncan'),
+        ('reference_modules/python-can/**/*', 'reference_modules/python-can'),
+        ('reference_modules/python-can-isotp/**/*', 'reference_modules/python-can-isotp'),
+        ('reference_modules/python-udsoncan/**/*', 'reference_modules/python-udsoncan'),
         ('assets/icon.ico', 'assets'),
         ('readme.md', '.'),
     ],

@@ -10,8 +10,6 @@ sys.path.insert(0, os.path.abspath("reference_modules/python-udsoncan"))
 
 import can
 import isotp
-import udsoncan
-from can.interfaces.vector import canlib, xlclass, xldefine
 from datetime import datetime
 import threading
 import time
