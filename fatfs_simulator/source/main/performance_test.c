@@ -49,45 +49,45 @@ static void emmc_io_test(void)
         clock_t start_time = 0, end_time = 0;
         #endif
 
-        // 清零统计数组
+        // Clear statistics arrays
         memset(write_collect, 0, sizeof(write_collect));
         memset(read_collect, 0, sizeof(read_collect));
 
         for (UINT size_idx = 0; size_idx < SECTOR_TYPE; size_idx++) {
             UINT block_size = block_sizes[size_idx];
             
-            // 每个块大小的统计变量
+            // Local statistics variables for each block size
             double min_write_time_local = 1e9, max_write_time_local = 0, total_write_time_local = 0;
             double min_read_time_local = 1e9, max_read_time_local = 0, total_read_time_local = 0;
     
-            // 执行10次写入测试
+            // Execute 10 write tests
             for (UINT i = 0; i < iterations; i++) {
                 // Write test on OTA_VBF partition
                 start_time = IOTEST_GETTIME();
                 ret = f_open(&file, IOTESTFILE_PATH, FA_WRITE | FA_CREATE_ALWAYS);
                 if (ret == FR_OK) {
-                    // 根据块大小选择写入方式
+                    // Choose write method based on block size
                     switch (block_size) {
                         case 1024:
                         case 2048:
                         case 4096:
-                            // 直接写入，不超过缓冲区大小
+                            // Direct write, does not exceed buffer size
                             f_write(&file, wrbuffer, block_size, &bw);
                             break;
                         case 8192:
-                            // 分两次写入，每次4096字节
+                            // Write in two parts, 4096 bytes each time
                             f_write(&file, wrbuffer, MAX_BLOCK_SIZE, &bw);
                             f_write(&file, wrbuffer, MAX_BLOCK_SIZE, &bw);
                             break;
                         case 16384:
-                            // 分四次写入，每次4096字节
+                            // Write in four parts, 4096 bytes each time
                             f_write(&file, wrbuffer, MAX_BLOCK_SIZE, &bw);
                             f_write(&file, wrbuffer, MAX_BLOCK_SIZE, &bw);
                             f_write(&file, wrbuffer, MAX_BLOCK_SIZE, &bw);
                             f_write(&file, wrbuffer, MAX_BLOCK_SIZE, &bw);
                             break;
                         default:
-                            // 对于其他大小，按4096字节块分割写入
+                            // For other sizes, split write by 4096-byte blocks
                             {
                                 UINT remaining = block_size;
                                 while (remaining > 0) {
@@ -105,48 +105,48 @@ static void emmc_io_test(void)
                 
                 double write_time = ((double)(end_time - start_time));
                 
-                // 记录每次写入时间
+                // Record each write time
                 write_collect[size_idx][i] = (uint32)write_time;
                 
-                // 更新统计值
+                // Update statistics
                 total_write_time_local += write_time;
                 if (write_time < min_write_time_local) min_write_time_local = write_time;
                 if (write_time > max_write_time_local) max_write_time_local = write_time;
             }
             
-            // 存储写入统计结果
-            write_collect[size_idx][iterations] = (uint32)min_write_time_local;     // 最小值
-            write_collect[size_idx][iterations + 1] = (uint32)max_write_time_local; // 最大值
-            write_collect[size_idx][iterations + 2] = (uint32)(total_write_time_local / iterations); // 平均值
+            // Store write statistics results
+            write_collect[size_idx][iterations] = (uint32)min_write_time_local;     // Minimum value
+            write_collect[size_idx][iterations + 1] = (uint32)max_write_time_local; // Maximum value
+            write_collect[size_idx][iterations + 2] = (uint32)(total_write_time_local / iterations); // Average value
 
-            // 执行10次读取测试
+            // Execute 10 read tests
             for (UINT i = 0; i < iterations; i++) {
                 // Read test on OTA_VBF partition
                 start_time = IOTEST_GETTIME();
                 ret = f_open(&file, IOTESTFILE_PATH, FA_READ);
                 if (ret == FR_OK) {
-                    // 根据块大小选择读取方式
+                    // Choose read method based on block size
                     switch (block_size) {
                         case 1024:
                         case 2048:
                         case 4096:
-                            // 直接读取，不超过缓冲区大小
+                            // Direct read, does not exceed buffer size
                             f_read(&file, wrbuffer, block_size, &br);
                             break;
                         case 8192:
-                            // 分两次读取，每次4096字节
+                            // Read in two parts, 4096 bytes each time
                             f_read(&file, wrbuffer, MAX_BLOCK_SIZE, &br);
                             f_read(&file, wrbuffer, MAX_BLOCK_SIZE, &br);
                             break;
                         case 16384:
-                            // 分四次读取，每次4096字节
+                            // Read in four parts, 4096 bytes each time
                             f_read(&file, wrbuffer, MAX_BLOCK_SIZE, &br);
                             f_read(&file, wrbuffer, MAX_BLOCK_SIZE, &br);
                             f_read(&file, wrbuffer, MAX_BLOCK_SIZE, &br);
                             f_read(&file, wrbuffer, MAX_BLOCK_SIZE, &br);
                             break;
                         default:
-                            // 对于其他大小，按4096字节块分割读取
+                            // For other sizes, split read by 4096-byte blocks
                             {
                                 UINT remaining = block_size;
                                 while (remaining > 0) {
@@ -164,34 +164,34 @@ static void emmc_io_test(void)
                 
                 double read_time = ((double)(end_time - start_time));
                 
-                // 记录每次读取时间
+                // Record each read time
                 read_collect[size_idx][i] = (uint32)read_time;
                 
-                // 更新统计值
+                // Update statistics
                 total_read_time_local += read_time;
                 if (read_time < min_read_time_local) min_read_time_local = read_time;
                 if (read_time > max_read_time_local) max_read_time_local = read_time;
             }
             
-            // 存储读取统计结果
-            read_collect[size_idx][iterations] = (uint32)min_read_time_local;     // 最小值
-            read_collect[size_idx][iterations + 1] = (uint32)max_read_time_local; // 最大值
-            read_collect[size_idx][iterations + 2] = (uint32)(total_read_time_local / iterations); // 平均值
+            // Store read statistics results
+            read_collect[size_idx][iterations] = (uint32)min_read_time_local;     // Minimum value
+            read_collect[size_idx][iterations + 1] = (uint32)max_read_time_local; // Maximum value
+            read_collect[size_idx][iterations + 2] = (uint32)(total_read_time_local / iterations); // Average value
         }
         
         #if EMBEDDENV 
         #else
-        // 打印测试结果
+        // Print test results
         printf("Write Performance Test Results:\n");
         printf("Block Size\tMin(ticks)\tMax(ticks)\tAvg(ticks)\tAll 10 Results\n");
         for (UINT size_idx = 0; size_idx < SECTOR_TYPE; size_idx++) {
             printf("%u bytes\t%u\t\t%u\t\t%u\t\t", 
                    block_sizes[size_idx],
-                   write_collect[size_idx][iterations],     // 最小值
-                   write_collect[size_idx][iterations + 1], // 最大值
-                   write_collect[size_idx][iterations + 2]  // 平均值
+                   write_collect[size_idx][iterations],     // Minimum value
+                   write_collect[size_idx][iterations + 1], // Maximum value
+                   write_collect[size_idx][iterations + 2]  // Average value
             );
-            // 打印所有10次测试结果
+            // Print all 10 test results
             for (UINT i = 0; i < iterations; i++) {
                 printf("%u ", write_collect[size_idx][i]);
             }
@@ -203,11 +203,11 @@ static void emmc_io_test(void)
         for (UINT size_idx = 0; size_idx < SECTOR_TYPE; size_idx++) {
             printf("%u bytes\t%u\t\t%u\t\t%u\t\t", 
                    block_sizes[size_idx],
-                   read_collect[size_idx][iterations],     // 最小值
-                   read_collect[size_idx][iterations + 1], // 最大值
-                   read_collect[size_idx][iterations + 2]  // 平均值
+                   read_collect[size_idx][iterations],     // Minimum value
+                   read_collect[size_idx][iterations + 1], // Maximum value
+                   read_collect[size_idx][iterations + 2]  // Average value
             );
-            // 打印所有10次测试结果
+            // Print all 10 test results
             for (UINT i = 0; i < iterations; i++) {
                 printf("%u ", read_collect[size_idx][i]);
             }
