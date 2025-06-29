@@ -129,6 +129,7 @@ class BootloaderPack:
                 params=isotp_params
             )
             
+            
             conn = PythonIsoTpConnection(self.stack)
             conn_func = PythonIsoTpConnection(self.stack_func)
             

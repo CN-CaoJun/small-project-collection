@@ -168,7 +168,7 @@ class ISOTPLayer:
                 'wftmax': 4,
                 'tx_data_length': 64,     # 增加到64字节以支持CANFD
                 'tx_data_min_length': 8,
-                'tx_padding': 0xAA,
+                'tx_padding': 0xCC,
                 'rx_flowcontrol_timeout': 1000,
                 'rx_consecutive_frame_timeout': 100,
                 'can_fd': True,           # 启用CANFD
