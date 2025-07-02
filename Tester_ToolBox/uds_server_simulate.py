@@ -254,7 +254,8 @@ class Config:
 
 class UDSResponder:
     """UDS Response Handler"""
-    def __init__(self, test_case_file='config_json/R_ZCU_response.json'):
+    def __init__(self, test_case_file='config_json/l_ZCU_response.json'):
+    # def __init__(self, test_case_file='config_json/R_ZCU_response.json'):
         """
         Initialize UDS responder
         :param test_case_file: Test case file
@@ -357,8 +358,10 @@ def main():
         isotp_layer = ISOTPLayer(
             bus=bus,
             notifier=notifier,
-            txid=0x7B6,
-            rxid=0x736,
+            txid=0x7B4,
+            rxid=0x734,            
+            # txid=0x7B6,
+            # rxid=0x736,
             is_fd=can_factory.is_fd  # Use CAN bus FD setting
         )
         
