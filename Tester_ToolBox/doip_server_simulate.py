@@ -2,6 +2,8 @@ import socket
 import threading
 import struct
 import time
+import json
+import os
 from typing import Dict, Tuple
 
 class DoIPServer:
@@ -13,6 +15,9 @@ class DoIPServer:
         self.socket = None
         self.running = False
         self.clients = {}  # 存储连接的客户端
+        
+        # 加载响应配置
+        self.response_config = self.load_response_config()
         
         # DoIP消息类型定义
         self.DOIP_HEADER_SIZE = 8
@@ -27,7 +32,32 @@ class DoIPServer:
         self.DOIP_DIAGNOSTIC_MESSAGE = 0x8001
         self.DOIP_DIAGNOSTIC_MESSAGE_ACK = 0x8002
         self.DOIP_DIAGNOSTIC_MESSAGE_NACK = 0x8003
-        
+    
+    def load_response_config(self):
+        """加载响应配置文件"""
+        config_path = os.path.join(os.path.dirname(__file__), 'config_json', 'R_ZCU_response.json')
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_list = json.load(f)
+                # 将列表转换为字典，便于快速查找
+                config_dict = {}
+                for item in config_list:
+                    req_hex = item['req'].upper()
+                    res_hex = item['res'].upper()
+                    config_dict[req_hex] = res_hex
+                print(f"Loaded {len(config_dict)} response configurations from {config_path}")
+                return config_dict
+        except FileNotFoundError:
+            print(f"Warning: Response config file not found: {config_path}")
+            print("Using default response generation")
+            return {}
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON config file: {e}")
+            return {}
+        except Exception as e:
+            print(f"Error loading response config: {e}")
+            return {}
+    
     def start_server(self):
         """启动DoIP服务器"""
         try:
@@ -191,7 +221,7 @@ class DoIPServer:
             ack_payload = struct.pack('>HHB', source_address, target_address, 0x00)  # 确认码
             self.send_doip_message(client_socket, self.DOIP_DIAGNOSTIC_MESSAGE_ACK, ack_payload)
             
-            # 模拟诊断响应
+            # 生成诊断响应
             if user_data:
                 response_data = self.generate_diagnostic_response(user_data)
                 if response_data:
@@ -207,6 +237,42 @@ class DoIPServer:
         if len(request_data) == 0:
             return None
         
+        # 将请求数据转换为十六进制字符串
+        request_hex = request_data.hex().upper()
+        print(f"Looking up response for request: {request_hex}")
+        
+        # 首先尝试从配置文件中查找完全匹配的响应
+        if request_hex in self.response_config:
+            response_hex = self.response_config[request_hex]
+            print(f"Found configured response: {response_hex}")
+            try:
+                return bytes.fromhex(response_hex)
+            except ValueError as e:
+                print(f"Error converting hex response to bytes: {e}")
+                return None
+        
+        # 如果没有找到完全匹配，尝试部分匹配（例如，只匹配服务ID）
+        service_id = request_data[0]
+        service_hex = f"{service_id:02X}"
+        
+        # 查找以相同服务ID开头的配置
+        for req_pattern, res_hex in self.response_config.items():
+            if req_pattern.startswith(service_hex):
+                # 检查请求长度是否匹配
+                if len(req_pattern) == len(request_hex):
+                    print(f"Found partial match for service 0x{service_hex}: {res_hex}")
+                    try:
+                        return bytes.fromhex(res_hex)
+                    except ValueError as e:
+                        print(f"Error converting hex response to bytes: {e}")
+                        continue
+        
+        # 如果配置文件中没有找到，使用默认的响应生成逻辑
+        print(f"No configured response found, using default logic")
+        return self.generate_default_diagnostic_response(request_data)
+    
+    def generate_default_diagnostic_response(self, request_data: bytes) -> bytes:
+        """生成默认诊断响应数据（原有逻辑）"""
         service_id = request_data[0]
         
         # 模拟一些基础的UDS服务响应
