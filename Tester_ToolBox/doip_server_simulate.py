@@ -7,14 +7,15 @@ import os
 from typing import Dict, Tuple
 
 class DoIPServer:
-    def __init__(self, host='127.0.0.1', port=13400, server_addr=0x1001, client_addr=0x0E80):
+    def __init__(self, host='127.0.0.1', port=13400, server_addr=0x1001,server_addr_func=0x1FFF, client_addr=0x0E80):
         self.host = host
         self.port = port
         self.server_addr = server_addr
+        self.server_addr_func = server_addr_func 
         self.client_addr = client_addr
         self.socket = None
         self.running = False
-        self.clients = {}  # 存储连接的客户端
+        self.clients = {}  
         
         # 加载响应配置
         self.response_config = self.load_response_config()
@@ -64,11 +65,12 @@ class DoIPServer:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.socket.bind((self.host, self.port))
-            self.socket.listen(5)
+            self.socket.listen(1)
             self.running = True
             
             print(f"DoIP Server started on {self.host}:{self.port}")
-            print(f"Server Address: 0x{self.server_addr:04X}")
+            print(f"Physical Address: 0x{self.server_addr:04X}")
+            print(f"Functional Address: 0x{self.server_addr_func:04X}")
             print(f"Expected Client Address: 0x{self.client_addr:04X}")
             print("Waiting for connections...")
             
@@ -217,29 +219,41 @@ class DoIPServer:
             print(f"  Target Address: 0x{target_address:04X}")
             print(f"  User Data: {user_data.hex().upper()}")
             
-            # 发送诊断消息确认
+            # 检查目标地址是否匹配物理地址或功能地址
+            if target_address == self.server_addr:
+                print(f"  Message type: Physical addressing (0x{self.server_addr:04X})")
+                address_type = "physical"
+            elif target_address == self.server_addr_func:
+                print(f"  Message type: Functional addressing (0x{self.server_addr_func:04X})")
+                address_type = "functional"
+            else:
+                print(f"  Warning: Target address 0x{target_address:04X} does not match server addresses")
+                print(f"  Expected: 0x{self.server_addr:04X} (physical) or 0x{self.server_addr_func:04X} (functional)")
+                address_type = "unknown"
+                
             ack_payload = struct.pack('>HHB', source_address, target_address, 0x00)  # 确认码
             self.send_doip_message(client_socket, self.DOIP_DIAGNOSTIC_MESSAGE_ACK, ack_payload)
             
-            # 生成诊断响应
             if user_data:
-                response_data = self.generate_diagnostic_response(user_data)
+                response_data = self.generate_diagnostic_response(user_data, address_type)
                 if response_data:
-                    # 发送诊断响应消息
-                    response_payload = struct.pack('>HH', target_address, source_address) + response_data
+                    # 对于功能寻址，响应时使用物理地址作为源地址
+                    response_source = self.server_addr
+                    response_payload = struct.pack('>HH', response_source, source_address) + response_data
                     self.send_doip_message(client_socket, self.DOIP_DIAGNOSTIC_MESSAGE, response_payload)
                     print(f"Diagnostic Response sent: {response_data.hex().upper()}")
+                    print(f"Response source address: 0x{response_source:04X} (physical)")
         else:
             print("Invalid Diagnostic Message payload")
     
-    def generate_diagnostic_response(self, request_data: bytes) -> bytes:
+    def generate_diagnostic_response(self, request_data: bytes, address_type: str = "physical") -> bytes:
         """生成诊断响应数据"""
         if len(request_data) == 0:
             return None
         
         # 将请求数据转换为十六进制字符串
         request_hex = request_data.hex().upper()
-        print(f"Looking up response for request: {request_hex}")
+        print(f"Looking up response for request: {request_hex} (address_type: {address_type})")
         
         # 首先尝试从配置文件中查找完全匹配的响应
         if request_hex in self.response_config:
@@ -251,31 +265,28 @@ class DoIPServer:
                 print(f"Error converting hex response to bytes: {e}")
                 return None
         
-        # 如果没有找到完全匹配，尝试部分匹配（例如，只匹配服务ID）
-        service_id = request_data[0]
-        service_hex = f"{service_id:02X}"
-        
-        # 查找以相同服务ID开头的配置
-        for req_pattern, res_hex in self.response_config.items():
-            if req_pattern.startswith(service_hex):
-                # 检查请求长度是否匹配
-                if len(req_pattern) == len(request_hex):
-                    print(f"Found partial match for service 0x{service_hex}: {res_hex}")
-                    try:
-                        return bytes.fromhex(res_hex)
-                    except ValueError as e:
-                        print(f"Error converting hex response to bytes: {e}")
-                        continue
-        
         # 如果配置文件中没有找到，使用默认的响应生成逻辑
         print(f"No configured response found, using default logic")
-        return self.generate_default_diagnostic_response(request_data)
+        return self.generate_default_diagnostic_response(request_data, address_type)
     
-    def generate_default_diagnostic_response(self, request_data: bytes) -> bytes:
+    def generate_default_diagnostic_response(self, request_data: bytes, address_type: str = "physical") -> bytes:
         """生成默认诊断响应数据（原有逻辑）"""
         service_id = request_data[0]
         
-        # 模拟一些基础的UDS服务响应
+        # 对于功能寻址，某些服务可能不响应或有特殊处理
+        if address_type == "functional":
+            # 功能寻址通常用于广播类服务，某些服务可能不响应
+            if service_id == 0x3E:  # TesterPresent - 功能寻址时通常不响应
+                print("TesterPresent with functional addressing - no response")
+                return None
+            elif service_id == 0x11:  # ECU Reset - 功能寻址时可能有特殊处理
+                print("ECU Reset with functional addressing")
+                # 可以添加特殊的功能寻址处理逻辑
+        elif address_type == "physical":
+            if service_id == 0x3E:
+                print("There is no need response for 3E80")
+                return None
+        
         if service_id == 0x10:  # DiagnosticSessionControl
             return bytes([0x50]) + request_data[1:2] + b'\x00\x32\x01\xF4'
         elif service_id == 0x22:  # ReadDataByIdentifier
@@ -290,7 +301,14 @@ class DoIPServer:
                 else:  # 发送密钥
                     return bytes([0x67, level])
         elif service_id == 0x3E:  # TesterPresent
-            return bytes([0x7E]) + request_data[1:]
+            if address_type == "physical":
+                return bytes([0x7E])  # 物理寻址时响应
+            else:
+                return None  # 功能寻址时不响应
+        elif service_id == 0x11:  # ECU Reset
+            if len(request_data) >= 2:
+                reset_type = request_data[1]
+                return bytes([0x51, reset_type])
         
         # 默认返回否定响应
         return bytes([0x7F, service_id, 0x11])  # serviceNotSupported
@@ -337,7 +355,8 @@ def main():
     server = DoIPServer(
         host='127.0.0.1',
         port=13400,
-        server_addr=0x1001,
+        server_addr=0x0004,
+        server_addr_func=0xE400,
         client_addr=0x0E80
     )
     

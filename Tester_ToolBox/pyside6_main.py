@@ -341,7 +341,6 @@ class MainWindow(QMainWindow):
         self.connection_widget.set_trace_handler(self.append_trace_message)
         
     def append_trace_message(self, message):
-        """添加跟踪消息到文本区域"""
         self.trace_text.append(message)
         # 自动滚动到底部
         scrollbar = self.trace_text.verticalScrollBar()
