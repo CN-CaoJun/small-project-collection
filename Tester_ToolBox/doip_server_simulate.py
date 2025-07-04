@@ -5,6 +5,7 @@ import time
 import json
 import os
 from typing import Dict, Tuple
+import sys
 
 class DoIPServer:
     def __init__(self, host='127.0.0.1', port=13400, server_addr=0x1001, server_addr_func=0x1FFF, client_addr=0x0E80):
@@ -23,8 +24,8 @@ class DoIPServer:
         
         # DoIP消息类型定义
         self.DOIP_HEADER_SIZE = 8
-        self.DOIP_VERSION = 0x02
-        self.DOIP_INVERSE_VERSION = 0xFD
+        self.DOIP_VERSION = 0x03
+        self.DOIP_INVERSE_VERSION = 0xFC
         
         # DoIP消息类型
         self.DOIP_VEHICLE_IDENTIFICATION_REQUEST = 0x0001
@@ -72,6 +73,8 @@ class DoIPServer:
             # 启动UDP服务器
             self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # 添加广播权限
+            self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             self.udp_socket.bind((self.host, self.port))
             
             self.running = True
@@ -81,6 +84,9 @@ class DoIPServer:
             print(f"Functional Address: 0x{self.server_addr_func:04X}")
             print(f"Expected Client Address: 0x{self.client_addr:04X}")
             print("TCP and UDP sockets are listening...")
+            print("Waiting for connections...")
+            
+            self.send_udp_vehicle_announcements()
             print("Waiting for connections...")
             
             # 创建UDP监听线程
@@ -106,7 +112,8 @@ class DoIPServer:
                     if self.running:
                         print(f"TCP Socket error: {e}")
                     break
-                    
+        except KeyboardInterrupt:
+            print("\nReceived keyboard interrupt")          
         except Exception as e:
             print(f"Server error: {e}")
         finally:
@@ -139,17 +146,30 @@ class DoIPServer:
                     self.process_udp_doip_message(client_address, payload_type, payload_data)
                 else:
                     print(f"Invalid UDP DoIP message: too short ({len(data)} bytes)")
-                    
             except socket.timeout:
                 continue
             except socket.error as e:
                 if self.running:
                     print(f"UDP socket error: {e}")
                 break
+            except KeyboardInterrupt:
+                print("\nReceived keyboard interrupt in UDP handler")
+                break
             except Exception as e:
                 print(f"UDP message handling error: {e}")
                 
         print("UDP message handler stopped")
+    
+    def process_udp_doip_message(self, client_address: Tuple[str, int], payload_type: int, payload_data: bytes):
+        """处理UDP DoIP消息"""
+        # Skip loopback address processing for UDP messages
+        # if client_address[0] == '127.0.0.1':
+        #     print(f"Skipping loopback UDP message from {client_address}")
+        #     return
+        if payload_type == self.DOIP_VEHICLE_IDENTIFICATION_REQUEST:
+            self.handle_udp_vehicle_identification_request(client_address, payload_data)
+        else:
+            print(f"Unknown UDP DoIP message type: 0x{payload_type:04X}")
     
     def handle_udp_vehicle_identification_request(self, client_address: Tuple[str, int], payload_data: bytes):
         """处理UDP车辆识别请求"""
@@ -168,8 +188,8 @@ class DoIPServer:
         self.send_udp_doip_message(client_address, self.DOIP_VEHICLE_IDENTIFICATION_RESPONSE, response_payload)
         print(f"UDP Vehicle Identification Response sent to {client_address}")
     
-        def send_udp_doip_message(self, client_address: Tuple[str, int], payload_type: int, payload_data: bytes):
-            """发送UDP DoIP消息"""
+    def send_udp_doip_message(self, client_address: Tuple[str, int], payload_type: int, payload_data: bytes):
+        """发送UDP DoIP消息"""
         # 构造DoIP头
         header = struct.pack('>BBHI', 
                            self.DOIP_VERSION, 
@@ -182,6 +202,48 @@ class DoIPServer:
         self.udp_socket.sendto(message, client_address)
         
         print(f"Sent UDP DoIP message to {client_address}: Type=0x{payload_type:04X}, Length={len(payload_data)}")
+        
+    def send_udp_vehicle_announcements(self):
+        """启动时发送三次车辆公告消息"""
+        print("Sending Vehicle Announcements...")
+        
+        # 构造车辆公告消息
+        vin = b'1HGBH41JXMN109186'  # 示例VIN码
+        logical_address = struct.pack('>H', self.server_addr)
+        eid = b'\x01\x02\x03\x04\x05\x06'  # 示例EID
+        gid = b'\x07\x08\x09\x0A\x0B\x0C'  # 示例GID
+        further_action = b'\x00'  # 无需进一步操作
+        sync_status = b'\x10'  # 同步状态 - 已同步
+        
+        # DoIP Vehicle Announcement Message (0x0004) 的载荷
+        announcement_payload = vin + logical_address + eid + gid + further_action + sync_status
+        
+        # 广播地址
+        broadcast_address = ('255.255.255.255', self.port)
+        
+        # 发送三次公告，每次间隔500毫秒
+        for i in range(3):
+            try:
+                # 构造DoIP头
+                header = struct.pack('>BBHI', 
+                                   self.DOIP_VERSION, 
+                                   self.DOIP_INVERSE_VERSION, 
+                                   self.DOIP_VEHICLE_IDENTIFICATION_RESPONSE,  # 0x0004
+                                   len(announcement_payload))
+                
+                # 发送UDP广播消息
+                message = header + announcement_payload
+                self.udp_socket.sendto(message, broadcast_address)
+                
+                print(f"Vehicle Announcement {i+1}/3 sent to broadcast address")
+                
+                # 等待500毫秒
+                time.sleep(1)
+                
+            except Exception as e:
+                print(f"Error sending vehicle announcement {i+1}: {e}")
+        
+        print("Vehicle Announcements completed")
         
     def handle_tcp_client(self, client_socket: socket.socket, client_address: Tuple[str, int]):
         """处理TCP客户端连接（原handle_client方法重命名）"""
@@ -482,4 +544,4 @@ def main():
         server.stop_server()
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
