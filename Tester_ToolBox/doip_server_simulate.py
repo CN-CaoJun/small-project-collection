@@ -37,7 +37,7 @@ class DoIPServer:
     
     def load_response_config(self):
         """加载响应配置文件"""
-        config_path = os.path.join(os.path.dirname(__file__), 'config_json', 'R_ZCU_response.json')
+        config_path = os.path.join(os.path.dirname(__file__), 'config_json', 'R_ZCU_response_doip.json')
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config_list = json.load(f)
@@ -389,8 +389,35 @@ class DoIPServer:
             if len(request_data) >= 2:
                 reset_type = request_data[1]
                 return bytes([0x51, reset_type])
+            
+        # 处理特定条件的直接响应
+
+        if (request_data[0] == 0x31 and 
+            request_data[1] == 0x01 and request_data[2] == 0xDD and request_data[3] == 0x02):
+            response = bytes([0x71, 0x01, 0xDD, 0x02, 0x00])
+            return response
         
-        # 默认返回否定响应
+        # 36 服务处理（TransferData）
+        if len(request_data) > 0 and request_data[0] == 0x34 and len(request_data) > 1:
+            response = bytes([0x74,0x40,0x00,0x00,0x3F,0x02])  # 正响应：76 + 块序列号
+            return response
+        
+        
+        # 36 服务处理（TransferData）
+        if len(request_data) > 0 and request_data[0] == 0x36 and len(request_data) > 1:
+            response = bytes([0x76, request_data[1]])  # 正响应：76 + 块序列号
+            return response
+        
+        # 37 服务处理（RequestTransferExit）
+        if len(request_data) > 0 and request_data[0] == 0x37:
+            response = bytes([0x77])  # 正响应：77
+            return response
+        
+        if (request_data[0] == 0x31 and 
+            request_data[1] == 0x01 and request_data[2] == 0xFF and request_data[3] == 0x00):
+            response = bytes([0x71, 0x01, 0xFF, 0x00, 0x00])
+            return response
+        
         return bytes([0x7F, service_id, 0x11])  # serviceNotSupported
     
     def send_doip_message(self, client_socket: socket.socket, payload_type: int, payload_data: bytes):

@@ -329,6 +329,7 @@ class UDSResponder:
             
         if len(payload) == 13 and payload.startswith(bytes.fromhex('3101FF00')):
             response = bytes.fromhex('7101FF0000')
+            # response = bytes.fromhex('7F3178')
             print(f"[UDS] [{timestamp}] Sending direct response: {response.hex().upper()}")
             return response
 
