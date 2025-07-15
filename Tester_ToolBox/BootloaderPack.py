@@ -63,7 +63,7 @@ class BootloaderPack:
             if isfd:
                 isotp_params = {
                     'stmin': 0,
-                    'blocksize': 0,
+                    'blocksize': 10,
                     'tx_padding': 0x00,
                     'override_receiver_stmin': None,
                     'wftmax': 4,
