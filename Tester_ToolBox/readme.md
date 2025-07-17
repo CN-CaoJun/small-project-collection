@@ -1,7 +1,7 @@
-# Chery ZCU Diagnostic ToolBox
+# Diagnostic ToolBox
 
 ## Introduction
-Chery ZCU Diagnostic ToolBox is a specialized software toolkit developed by Aptiv for Chery Automobile, specifically designed for automotive ECU diagnostics and flashing verification. This tool supports UDS diagnostic communication via CAN bus, enabling ECU flashing and parameter configuration functionalities. As a dedicated solution for Chery's ZCU (Zone Control Unit) development and validation, it ensures reliable and efficient ECU programming and testing processes.
+Chery ZCU Diagnostic ToolBox is a specialized software toolkit developed by Aptiv for Chery Automobile, specifically designed for automotive ECU diagnostics and flashing verification. This tool supports UDS diagnostic communication via CAN bus, enabling ECU flashing and parameter configuration functionalities. As a dedicated solution for ZCU (Zone Control Unit) development and validation, it ensures reliable and efficient ECU programming and testing processes.
 **Key Features:**
 
    - Support for standard CAN and CAN-FD communication
